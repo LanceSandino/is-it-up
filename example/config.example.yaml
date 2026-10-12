@@ -1,0 +1,91 @@
+checks:
+  - name: main-http
+    type: http
+    address: http://localhost:8080
+    path: /health
+    timeout_ms: 5000  # 5 second timeout for web app
+    severity: critical
+
+  - name: main-https
+    type: http
+    address: https://localhost:8443
+    path: /health
+    tls_mode: skip-verify  # Skip certificate verification for self-signed certs
+    timeout_ms: 5000  # 5 second timeout for web app
+    severity: critical
+
+  - name: rds-main
+    type: mysql
+    address: localhost:3306
+    user: appuser
+    password: apppass
+    timeout_ms: 10000  # 10 second timeout for database
+    severity: critical
+
+  - name: postgres-main
+    type: postgres
+    address: localhost:5432
+    user: appuser
+    password: apppass
+    database: appdb
+    tls_mode: disable  # Disable TLS for local development
+    timeout_ms: 10000  # 10 second timeout for database
+    severity: critical
+
+  - name: rabbitmq-amqp
+    type: rabbitmq
+    address: localhost:5672
+    user: guest
+    password: guest
+    vhost: /
+    timeout_ms: 3000  # 3 second timeout for message queue
+    severity: critical
+
+  - name: opensearch
+    type: opensearch # can also use 'elasticsearch'
+    address: http://localhost:9200
+    path: _cluster/health
+    timeout_ms: 4000  # 4 second timeout for search cluster
+    severity: critical
+
+  - name: elasticache
+    type: redis
+    address: localhost:6379
+    password: redispass
+    redis_info: true
+    timeout_ms: 3000  # 3 second timeout for cache
+    severity: critical
+
+  - name: maxwell
+    type: tcp
+    address: localhost:3306
+    user: appuser
+    password: apppass
+    timeout_ms: 2000  # 2 second timeout for TCP connection
+    severity: info
+
+  - name: mailhog-smtp
+    type: smtp
+    # MailHog SMTP server for development email testing
+    address: localhost:1025
+    smtp_encryption: none  # No encryption for local development
+    timeout_ms: 5000  # 5 second timeout for SMTP
+    severity: warning
+
+  # DocumentDB / MongoDB example check (DocumentDB-compatible)
+  - name: local-documentdb
+    type: documentdb
+    address: localhost:27017
+    user: root
+    password: examplepass
+    database: admin
+    tls_mode: disable
+    timeout_ms: 2000
+    severity: critical
+
+  # Alias using type 'mongo' and the Full-URI style address
+  - name: local-mongo
+    type: mongo
+    address: "mongodb://root:examplepass@localhost:27017/admin?authSource=admin&tls=false"
+    timeout_ms: 2000
+    severity: critical

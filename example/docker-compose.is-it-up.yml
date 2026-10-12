@@ -1,0 +1,19 @@
+name: is-it-up-runner
+
+services:
+  is-it-up:
+    image: ghcr.io/lancesandino/is-it-up:latest
+    network_mode: host
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./config.example.yaml:/config/config.yaml:ro
+    command:
+      - --config
+      - /config/config.yaml
+      - --fail-on-unhealthy
+    restart: "no"

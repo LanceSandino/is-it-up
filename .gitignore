@@ -1,0 +1,119 @@
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Build artifacts
+bin/
+dist/
+build/
+
+# Coverage reports
+coverage.out
+coverage.html
+coverage-*.html
+*.cover
+*.coverprofile
+
+# Environment and configuration files
+.env
+.env.local
+.env.*.local
+*.local.yaml
+*.local.yml
+
+# Allow sample/template files
+!.env.sample
+!.env.example
+!*.example.yaml
+!*.example.yml
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Node.js (if any frontend tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Security sensitive files
+aws-secret.yaml
+*secret*.yaml
+*credentials*.yaml
+*password*.yaml
+*private*.yaml
+
+# But allow documented examples and templates
+!*secret*.example.yaml
+!*credentials*.example.yaml
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+
+# Local development overrides
+docker-compose.override.yml
+.local/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test artifacts
+test-results/
+test-output/
+junit.xml
+
+# Terraform (if used)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# AWS CLI cache
+.aws/cli/cache/
+
+# Local configuration overrides
+*.local.yaml
+*.local.yaml
+*workspace
+BLUEPRINT.md

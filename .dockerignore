@@ -1,0 +1,13 @@
+.git
+.github
+.archive
+dist
+coverage*
+*.log
+.env
+.env.*
+example
+docs
+scripts
+CHANGES.md
+DECISIONS.md

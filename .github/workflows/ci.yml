@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan committed history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test, race-check, and enforce coverage
+        run: /bin/bash scripts/test.sh
+
+      - name: Validate shipped configurations
+        run: /bin/bash scripts/validate-examples.sh
+
+      - name: Static analysis
+        run: /bin/bash scripts/static-analysis.sh
+
+      - name: Vulnerability scan
+        run: /bin/bash scripts/security-scan.sh
+
+      - name: Installer integration test
+        run: /bin/bash scripts/test-install.sh
+
+      - name: Release packaging test
+        run: /bin/bash scripts/test-release.sh
+
+      - name: Build Linux container
+        run: docker build --pull=false --tag is-it-up:ci .
+
+      - name: Verify container metadata
+        run: docker run --rm is-it-up:ci --version
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.0
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: error

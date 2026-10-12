@@ -1,0 +1,31 @@
+[Unit]
+Description=is-it-up health checks
+Documentation=https://github.com/LanceSandino/is-it-up
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=is-it-up
+Group=is-it-up
+ExecStart=@BINDIR@/is-it-up --config @CONFIG@ --fail-on-unhealthy
+EnvironmentFile=-/etc/is-it-up/environment
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+PrivateDevices=true
+PrivateMounts=true
+RemoveIPC=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077

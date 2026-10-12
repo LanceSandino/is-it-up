@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Scan tagged history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+
+      - name: Validate release metadata
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$TAG" = "v$(tr -d '[:space:]' < VERSION)"
+          grep -Fq "## [${TAG#v}]" CHANGELOG.md
+
+      - name: Run quality and vulnerability gates
+        run: |
+          /bin/bash scripts/test.sh
+          /bin/bash scripts/validate-examples.sh
+          /bin/bash scripts/static-analysis.sh
+          /bin/bash scripts/security-scan.sh
+          /bin/bash scripts/test-install.sh
+
+      - name: Build release archives
+        env:
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: /bin/bash scripts/package-release.sh "${VERSION#v}"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=${TAG#v}
+          notes=$(awk -v version="$version" '$0 ~ "^## \\[" version "\\]" {show=1; next} /^## \[/ {if (show) exit} show' CHANGELOG.md)
+          gh release create "$TAG" dist/release/* --verify-tag --title "$TAG" --notes "$notes"
+
+  container:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and publish multi-architecture image
+        env:
+          REGISTRY: ghcr.io
+          IMAGE: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          echo "${{ github.token }}" | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+          docker buildx create --use
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            --build-arg VERSION="${VERSION#v}" --build-arg COMMIT="$COMMIT" \
+            --tag "$REGISTRY/${IMAGE,,}:${VERSION#v}" --tag "$REGISTRY/${IMAGE,,}:latest" \
+            --provenance=true --sbom=true --push .

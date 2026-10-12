@@ -1,0 +1,12 @@
+[Unit]
+Description=Run is-it-up health checks on a schedule
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=@INTERVAL@
+RandomizedDelaySec=15s
+Persistent=true
+Unit=is-it-up.service
+
+[Install]
+WantedBy=timers.target
