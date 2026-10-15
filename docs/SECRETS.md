@@ -339,9 +339,9 @@ The tool uses AWS SDK v2 default credential chain:
 ### Performance Optimizations
 
 **Caching Strategy**:
-- 5-minute TTL per secret
+- 5-minute TTL per secret, region, and requested version stage
 - In-memory cache with automatic expiration
-- Concurrent fetch deduplication using singleflight
+- Concurrent fetch deduplication using the same stage-aware identity
 
 **Regional Client Pooling**:
 - Separate AWS clients per region

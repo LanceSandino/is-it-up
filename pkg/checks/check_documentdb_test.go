@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 

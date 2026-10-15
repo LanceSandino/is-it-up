@@ -10,9 +10,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/LanceSandino/is-it-up/pkg/checks"
-	"github.com/LanceSandino/is-it-up/pkg/logger"
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/checks"
+	"github.com/LanceSandino/is-it-up/v2/pkg/logger"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // RunOptions allows injecting dependencies for testing.

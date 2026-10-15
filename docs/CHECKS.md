@@ -84,7 +84,7 @@ Any string field can reference secrets using:
 | `path` | string | | Path to append to address |
 | `tls_mode` | string | | Canonical TLS mode for checks that support TLS. Allowed values vary by check type (see below). Example: skip-verify, required, disable, preferred, verify-full |
 
-**Important**: The `address` field must include the protocol scheme. For HTTPS URLs, TLS validation defaults to `required` (secure). Use `tls_mode: skip-verify` for self-signed certificates. HTTP URLs ignore TLS settings unless `tls_mode` is set.
+**Important**: The `address` field must include the protocol scheme. For HTTPS URLs, TLS validation defaults to `required` (secure). Use `tls_mode: skip-verify` for self-signed certificates. Setting `tls_mode: required` with an `http://` address is rejected before any request is sent. Redirects are returned as the checked response and are never followed automatically, so a check cannot cross to another authority. Response bodies are limited to 1 MiB.
 
 **Success Criteria**: HTTP status codes 200-399
 **Failure Criteria**: HTTP status codes 400+, connection errors, timeouts
@@ -187,7 +187,13 @@ tcp connect to server.example.com:22
 | `user` | string | ✓ | Database username (supports secrets) |
 | `password` | string | | Database password (supports secrets) |
 | `database` | string | | Database name (no database selected by default) |
-| `tls_mode` | string | | TLS mode: for mysql use: skip-verify, preferred, required (see per-check notes) |
+| `tls_mode` | string | | TLS mode: required (verified), skip-verify, preferred, or disable |
+
+When a password is configured, TLS defaults to `required` and verifies the
+server certificate and hostname. `skip-verify`, `preferred`, and `disable` are
+explicit compatibility modes and should not be used for production credentials.
+User names containing MySQL DSN delimiters are rejected rather than interpreted
+as connection parameters.
 
 **Success Criteria**: Successful database connection, ping, AND SELECT 1 execution
 **Failure Criteria**: Connection failure, authentication failure, ping failure, or query failure
@@ -203,7 +209,7 @@ tcp connect to server.example.com:22
   address: rds.us-east-1.amazonaws.com:3306
   user: healthcheck
   password: sm://db-credentials#mysql_password
-  tls_mode: skip-verify
+  tls_mode: required
   timeout_ms: 10000
   severity: critical
 
@@ -213,6 +219,7 @@ tcp connect to server.example.com:22
   address: localhost:3306
   user: root
   password: development_pass
+  tls_mode: disable
   severity: warning
 
 # Read replica with secrets
@@ -244,7 +251,12 @@ mysql SELECT 1 on rds.us-east-1.amazonaws.com:3306 as user=healthcheck password=
 | `user` | string | ✓ | Database username (supports secrets) |
 | `password` | string | | Database password (supports secrets) |
 | `database` | string | | Database name (default: postgres) |
-| `tls_mode` | string | | TLS mode: for postgres use: disable, require, verify-ca, verify-full |
+| `tls_mode` | string | | TLS mode: disable, require, verify-ca, or verify-full |
+
+PostgreSQL defaults to `verify-full`, including certificate and hostname
+verification. `require` encrypts the connection but does not verify peer
+identity, so use it only as an explicit compatibility mode. The check derives a
+driver connection timeout from the complete check deadline.
 
 **Success Criteria**: Successful database connection, ping, AND SELECT 1 execution
 **Failure Criteria**: Connection failure, authentication failure, ping failure, or query failure
@@ -261,7 +273,7 @@ mysql SELECT 1 on rds.us-east-1.amazonaws.com:3306 as user=healthcheck password=
   user: healthcheck
   password: sm://db-credentials#postgres_password
   database: appdb
-  tls_mode: require
+  tls_mode: verify-full
   timeout_ms: 10000
   severity: critical
 
@@ -287,7 +299,7 @@ mysql SELECT 1 on rds.us-east-1.amazonaws.com:3306 as user=healthcheck password=
 
 **Result Details**:
 ```
-postgres SELECT 1 on postgres.us-east-1.rds.amazonaws.com:5432 as user=healthcheck password=REDACTED sslmode=require
+postgres SELECT 1 on postgres.us-east-1.rds.amazonaws.com:5432 as user=healthcheck password=REDACTED sslmode=verify-full
 ```
 
 ---
@@ -350,6 +362,11 @@ This check is intentionally simple: it verifies connectivity and basic liveness 
 | `address` | string | ✓ | Host:port for Redis server |
 | `password` | string | | Redis AUTH password (supports secrets) |
 | `redis_info` | boolean | | Enable INFO command for metrics |
+| `tls_mode` | string | | required (verified), skip-verify, or disable |
+
+Credential-bearing checks default to verified TLS. `tls_mode: disable` is
+required for an authenticated plaintext endpoint; `skip-verify` encrypts but
+does not authenticate the server and is intended only for controlled testing.
 
 **Success Criteria**: Successful PING response (and INFO if enabled)
 **Failure Criteria**: Connection failure, AUTH failure, command timeout
@@ -362,6 +379,7 @@ This check is intentionally simple: it verifies connectivity and basic liveness 
   type: redis
   address: elasticache.abcd.cache.amazonaws.com:6379
   password: sm://cache-secrets#redis_auth_token
+  tls_mode: required
   redis_info: true
   timeout_ms: 3000
   severity: critical
@@ -377,6 +395,7 @@ This check is intentionally simple: it verifies connectivity and basic liveness 
 - name: local-redis
   type: redis
   address: localhost:6379
+  tls_mode: disable
   redis_info: true
   severity: info
 ```
@@ -409,7 +428,7 @@ pong; info: role=master used_memory=908528
 | `path` | string | | Health endpoint path (default: _cluster/health) |
 
 **Success Criteria**: HTTP 200 response with cluster status green/yellow
-**Failure Criteria**: HTTP errors, red cluster status, connection failure
+**Failure Criteria**: HTTP errors, red cluster status, connection failure, or a response larger than 1 MiB
 
 **Supported Types**: `elasticsearch` (alias: `opensearch`)
 
@@ -453,7 +472,7 @@ elasticsearch GET url=https://search-prod.us-east-1.es.amazonaws.com/_cluster/he
 
 **Purpose**: Verify message queue connectivity and channel operations
 
-**Method**: AMQP connection + channel creation (or TCP fallback)
+**Method**: AMQP connection + channel creation; anonymous checks may use a TCP fallback
 
 **Configuration**:
 | Field | Type | Required | Description |
@@ -462,12 +481,14 @@ elasticsearch GET url=https://search-prod.us-east-1.es.amazonaws.com/_cluster/he
 | `user` | string | | AMQP username (supports secrets) |
 | `password` | string | | AMQP password (supports secrets) |
 | `vhost` | string | | Virtual host (default: "/") |
+| `tls_mode` | string | | required (verified), skip-verify, or disable |
 
 **Behavior**:
-- The check attempts an AMQP connection and channel open first. If AMQP fails,
-  it attempts a TCP connection. A successful TCP fallback reports the endpoint
-  as reachable even though AMQP authentication or channel creation did not
-  succeed; inspect the result details when protocol-level health is required.
+- Credential-bearing checks default to verified TLS. Plaintext requires
+  `tls_mode: disable`; `skip-verify` is an explicit testing-only mode.
+- The check attempts an AMQP connection and channel open first. Only anonymous
+  checks may fall back to a TCP connection. Authentication or channel failures
+  never become a healthy result through TCP fallback.
 
 **Examples**:
 
@@ -478,6 +499,7 @@ elasticsearch GET url=https://search-prod.us-east-1.es.amazonaws.com/_cluster/he
   address: rmq-cluster.example.com:5672
   user: healthcheck
   password: sm://mq-secrets#rabbitmq_password
+  tls_mode: required
   vhost: /production
   timeout_ms: 3000
   severity: critical
@@ -514,7 +536,10 @@ tcp connect to localhost:5672
 - **none/plain**: No encryption (port 587, not recommended for production)
 
 **Success Criteria**: SMTP protocol handshake AND optional authentication success
-**Failure Criteria**: Connection, protocol, encryption, or authentication failure
+**Failure Criteria**: Connection, protocol, encryption, authentication, or oversized server reply failure
+
+`starttls` and `tls` require the server to advertise and complete STARTTLS;
+there is no plaintext fallback. SMTP protocol replies are limited to 64 KiB.
 
 **Examples**:
 

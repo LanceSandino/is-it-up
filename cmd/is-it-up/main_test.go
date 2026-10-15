@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/LanceSandino/is-it-up/pkg/checks"
+	"github.com/LanceSandino/is-it-up/v2/pkg/checks"
 )
 
 // TestMainWorkflow tests the main workflow through the exposed functions

@@ -13,7 +13,7 @@ import (
 func TestAWSFetcher_ReturnsCachedValue(t *testing.T) {
 	f := &AWSSecretsFetcher{}
 	// seed cache with a recent timestamp
-	f.cache.Store("mysecret", cachedSecret{val: "cached-data", ts: time.Now()})
+	f.cache.Store("mysecret|stage=", cachedSecret{val: "cached-data", ts: time.Now()})
 
 	ref := &SecretRef{Provider: "aws-secrets-manager", SecretID: "mysecret"}
 	v, err := f.GetSecret(context.Background(), ref)

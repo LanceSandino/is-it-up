@@ -4,9 +4,13 @@ package checks
 
 import (
 	"crypto/tls"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
+
+const maxHTTPResponseBytes = 1 << 20
 
 // HTTPClientConfig holds configuration for HTTP client creation.
 type HTTPClientConfig struct {
@@ -51,5 +55,19 @@ func NewHTTPClient(config HTTPClientConfig) *http.Client {
 	return &http.Client{
 		Timeout:   config.Timeout,
 		Transport: transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
+}
+
+func readBoundedHTTPBody(reader io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxHTTPResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxHTTPResponseBytes {
+		return nil, fmt.Errorf("response exceeds %d-byte limit", maxHTTPResponseBytes)
+	}
+	return body, nil
 }

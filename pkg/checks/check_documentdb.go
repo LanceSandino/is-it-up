@@ -71,7 +71,7 @@ func checkDocumentDB(ctx context.Context, cfg CheckConfig) (bool, string) {
 	// Supported values (informational only): "", "required", "skip-verify", "disable".
 	// When a full URI is provided it may already include TLS/auth settings; we only
 	// apply a TLS config when the user requests skip-verify or required via TLSMode.
-	clientOpts := options.Client()
+	clientOpts := options.Client().ApplyURI(uri)
 	tlsMode := strings.TrimSpace(cfg.TLSMode)
 	switch tlsMode {
 	case "skip-verify":

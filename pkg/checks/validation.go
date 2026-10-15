@@ -43,9 +43,13 @@ func ValidateResolvedSecrets(cfg *Config) error {
 		if check.Type == "smtp" && check.SMTPEncryption.HasValue() {
 			encValue := check.SMTPEncryption.String()
 			if !validateSMTPEncryption(encValue) {
+				value := encValue
+				if check.SMTPEncryption.Sensitive {
+					value = "REDACTED"
+				}
 				errors = append(errors, ValidationError{
 					Field:   fmt.Sprintf("%s.smtp_encryption", fieldPrefix),
-					Value:   encValue,
+					Value:   value,
 					Message: "smtp_encryption must be one of: tls, starttls, ssl, smtps, none, plain",
 					Check:   check.Name,
 				})
@@ -239,15 +243,20 @@ func (v *ConfigValidator) validateCheck(check CheckConfig, fieldPrefix string) V
 				})
 			}
 		}
+		if check.TLSMode == "required" && check.Address.HasValue() && !strings.HasPrefix(strings.ToLower(check.Address.String()), "https://") {
+			errors = append(errors, ValidationError{
+				Field: fmt.Sprintf("%s.address", fieldPrefix), Message: "https:// address is required when tls_mode is required", Check: check.Name,
+			})
+		}
 	case "mysql":
 		if check.TLSMode != "" {
 			switch check.TLSMode {
-			case "skip-verify", "preferred", "required":
+			case "skip-verify", "preferred", "required", "disable":
 			default:
 				errors = append(errors, ValidationError{
 					Field:   fmt.Sprintf("%s.tls_mode", fieldPrefix),
 					Value:   check.TLSMode,
-					Message: "tls_mode must be one of: skip-verify, preferred, required for mysql",
+					Message: "tls_mode must be one of: skip-verify, preferred, required, disable for mysql",
 					Check:   check.Name,
 				})
 			}
@@ -282,8 +291,13 @@ func (v *ConfigValidator) validateCheck(check CheckConfig, fieldPrefix string) V
 			})
 		}
 	case "rabbitmq":
-		// No method field required; RabbitMQ checks will attempt AMQP by default with TCP fallback.
-		// Will implement back if mgmt API checks are reintroduced.
+		if check.TLSMode != "" && check.TLSMode != "required" && check.TLSMode != "skip-verify" && check.TLSMode != "disable" {
+			errors = append(errors, ValidationError{Field: fmt.Sprintf("%s.tls_mode", fieldPrefix), Value: check.TLSMode, Message: "tls_mode must be one of: required, skip-verify, disable for rabbitmq", Check: check.Name})
+		}
+	case "redis":
+		if check.TLSMode != "" && check.TLSMode != "required" && check.TLSMode != "skip-verify" && check.TLSMode != "disable" {
+			errors = append(errors, ValidationError{Field: fmt.Sprintf("%s.tls_mode", fieldPrefix), Value: check.TLSMode, Message: "tls_mode must be one of: required, skip-verify, disable for redis", Check: check.Name})
+		}
 	case "smtp":
 		// SMTP encryption validation is handled after secret resolution in ValidateResolvedSecrets
 		// This is because encryption values may come from secrets and need to be resolved first

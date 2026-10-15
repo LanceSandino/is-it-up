@@ -10,8 +10,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/LanceSandino/is-it-up/pkg/checks"
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/checks"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 func writeTempConfig(t *testing.T, content string) string {

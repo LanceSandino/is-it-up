@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 func TestRunAll_AppliesConfiguredTimeout(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestRunAll_RabbitMQ_AMQP_Success tests successful RabbitMQ AMQP connection with proper authentication.
@@ -118,7 +118,7 @@ func TestRunAll_RabbitMQ_AMQP_SuccessAndFailure(t *testing.T) {
 	defer func() { checkRabbitAMQPFn = orig }()
 
 	checkRabbitAMQPFn = func(ctx context.Context, address, user, password, vhost string) (bool, string) {
-		if address == "good:5672" {
+		if address == "amqps://good:5672" {
 			return true, "amqp connect ok"
 		}
 		return false, "access refused"

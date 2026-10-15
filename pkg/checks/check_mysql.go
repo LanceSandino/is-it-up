@@ -5,12 +5,13 @@ package checks
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/LanceSandino/is-it-up/pkg/logger"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/LanceSandino/is-it-up/v2/pkg/logger"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 )
 
 // sqlOpen is a package-level variable so tests can replace it with a
@@ -52,57 +53,78 @@ func checkMySQL(ctx context.Context, cfg CheckConfig) (bool, string) {
 			addr = "127.0.0.1:3306"
 		}
 	}
-	var dsn string
+	if strings.ContainsAny(user, ":@/[]()") {
+		return false, NewCheckError("mysql", cfg.Name, "config", errors.New("MySQL user contains DSN delimiter characters")).Error()
+	}
+	var mysqlConfig *mysqlDriver.Config
+	var err error
 	if strings.Contains(addr, "@") {
-		dsn = addr
+		mysqlConfig, err = mysqlDriver.ParseDSN(addr)
+		if err != nil {
+			return false, NewCheckError("mysql", cfg.Name, "config", errors.New(redactText(err.Error(), user, pass))).Error()
+		}
 	} else {
 		if user == "" {
 			user = "root"
 		}
-		// Build base DSN and optionally append TLS param if requested via
-		// The canonical per-check setting is CheckConfig.TLSMode (tls_mode in YAML).
-		// e.g. "skip-verify" or "true" which map to go-sql-driver/mysql tls
-		// configs.
-		base := ""
-		if db == "" {
-			base = fmt.Sprintf("%s:%s@tcp(%s)/", user, pass, addr)
-		} else {
-			base = fmt.Sprintf("%s:%s@tcp(%s)/%s", user, pass, addr, db)
-		}
-		// Allow per-check TLS mode configured via canonical CheckConfig.TLSMode
-		tlsMode := strings.TrimSpace(cfg.TLSMode)
-		if tlsMode == "" {
-			dsn = base
-		} else {
-			// If DSN already contains a '?', append with '&' otherwise use '?'
-			sep := "?"
-			if strings.Contains(base, "?") {
-				sep = "&"
-			}
-			dsn = base + sep + "tls=" + tlsMode
-		}
+		mysqlConfig = mysqlDriver.NewConfig()
+		mysqlConfig.User = user
+		mysqlConfig.Passwd = pass
+		mysqlConfig.Net = "tcp"
+		mysqlConfig.Addr = addr
+		mysqlConfig.DBName = db
 	}
+
+	hasPassword := mysqlConfig.Passwd != "" || pass != ""
+	tlsSetting, err := mysqlTLSSetting(cfg.TLSMode, hasPassword)
+	if err != nil {
+		return false, NewCheckError("mysql", cfg.Name, "config", err).Error()
+	}
+	mysqlConfig.TLSConfig = tlsSetting
+	requestTimeout := timeoutFromContext(ctx, 4*time.Second)
+	mysqlConfig.Timeout = requestTimeout
+	mysqlConfig.ReadTimeout = requestTimeout
+	mysqlConfig.WriteTimeout = requestTimeout
+	dsn := mysqlConfig.FormatDSN()
 
 	tctx, cancel := contextWithDefaultTimeout(ctx, 4*time.Second)
 	defer cancel()
 	dbh, err := sqlOpen("mysql", dsn)
 	if err != nil {
-		checkErr := NewCheckError("mysql", cfg.Name, "connect", err)
+		checkErr := NewCheckError("mysql", cfg.Name, "connect", fmt.Errorf("%s", redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() { _ = dbh.Close() }()
 	if err := dbh.PingContext(tctx); err != nil {
-		checkErr := NewCheckError("mysql", cfg.Name, "ping", err)
+		checkErr := NewCheckError("mysql", cfg.Name, "ping", fmt.Errorf("%s", redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	var one int
 	row := dbh.QueryRowContext(tctx, "SELECT 1")
 	if err := row.Scan(&one); err != nil {
-		checkErr := NewCheckError("mysql", cfg.Name, "select", err)
+		checkErr := NewCheckError("mysql", cfg.Name, "select", fmt.Errorf("%s", redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	if one == 1 {
 		return true, "select 1 ok"
 	}
 	return false, "unexpected select result"
+}
+
+func mysqlTLSSetting(mode string, hasPassword bool) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "":
+		if hasPassword {
+			return "true", nil
+		}
+		return "", nil
+	case "required":
+		return "true", nil
+	case "skip-verify", "preferred":
+		return strings.ToLower(strings.TrimSpace(mode)), nil
+	case "disable":
+		return "", nil
+	default:
+		return "", fmt.Errorf("unsupported MySQL tls_mode %q", mode)
+	}
 }

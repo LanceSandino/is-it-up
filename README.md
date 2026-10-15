@@ -16,9 +16,9 @@ licensed under the [MIT License](LICENSE).
 | `tcp` | A TCP socket can be opened | `address` or `host`/`port` |
 | `mysql` | Connect, ping, and `SELECT 1` | `user`, `password`, `database`, `tls_mode` |
 | `postgres` | Connect, ping, and `SELECT 1` | `user`, `password`, `database`, `tls_mode` |
-| `redis` | AUTH when configured, then PING; optional INFO parsing | `password`, `redis_info` |
+| `redis` | AUTH when configured, then PING; optional INFO parsing | `password`, `redis_info`, `tls_mode` |
 | `elasticsearch`, `opensearch` | HTTP 200 and cluster health; green/yellow is healthy | `path` |
-| `rabbitmq` | AMQP connect and channel open, with TCP reachability fallback | `user`, `password`, `vhost` |
+| `rabbitmq` | AMQP connect and channel open; anonymous checks may fall back to TCP | `user`, `password`, `vhost`, `tls_mode` |
 | `smtp` | SMTP handshake, optional authentication, and selected encryption | `user`, `password`, `smtp_encryption` |
 | `mongo`, `documentdb` | MongoDB-compatible connection and primary ping | `user`, `password`, `database`, `tls_mode` |
 
@@ -37,7 +37,7 @@ The recommended installation lets you inspect the script before using `sudo`:
 curl -fsSLo /tmp/install-is-it-up.sh \
   https://raw.githubusercontent.com/LanceSandino/is-it-up/main/scripts/install.sh
 less /tmp/install-is-it-up.sh
-sudo /bin/bash /tmp/install-is-it-up.sh --version 1.0.0
+sudo /bin/bash /tmp/install-is-it-up.sh --version 2.0.0
 is-it-up --version
 ```
 
@@ -62,7 +62,7 @@ Installer options:
 
 ```bash
 sudo /bin/bash /tmp/install-is-it-up.sh \
-  --version 1.0.0 --service --interval 5min
+  --version 2.0.0 --service --interval 5min
 sudoedit /etc/is-it-up/config.yaml
 sudo systemctl start is-it-up.service
 sudo systemctl status is-it-up.service
@@ -89,7 +89,7 @@ long-lived credentials. Restrict that file to `root:is-it-up` with mode `0640`.
 Rerun the installer. Existing `/etc/is-it-up/config.yaml` content is preserved:
 
 ```bash
-sudo /bin/bash /tmp/install-is-it-up.sh --version 1.0.0
+sudo /bin/bash /tmp/install-is-it-up.sh --version 2.0.0
 ```
 
 Omit `--version` to follow the latest GitHub Release.
@@ -125,7 +125,7 @@ checks:
     user: healthcheck
     password: sm://is-it-up/config#postgres.password
     database: app
-    tls_mode: require
+    tls_mode: verify-full
     timeout_ms: 10000
     severity: critical
 
@@ -133,6 +133,7 @@ checks:
     type: redis
     address: cache.example.com:6379
     password: sm://is-it-up/config#redis.password
+    tls_mode: required
     redis_info: true
     timeout_ms: 3000
     severity: warning
@@ -203,9 +204,9 @@ Run the published image as a non-root, read-only one-shot container:
 
 ```bash
 docker run --rm --read-only --network host \
-  --user 65532:65532 --cap-drop ALL \
+  --user 65532:65532 --cap-drop ALL --memory 128m --pids-limit 64 \
   -v "$PWD/config.yaml:/config/config.yaml:ro" \
-  ghcr.io/lancesandino/is-it-up:1.0.0 \
+  ghcr.io/lancesandino/is-it-up:2.0.0 \
   --config /config/config.yaml --fail-on-unhealthy
 ```
 

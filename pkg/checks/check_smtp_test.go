@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestCheckSMTP_SuccessfulAuth tests successful SMTP authentication
@@ -132,8 +132,8 @@ func TestCheckSMTPStartTLS_ServerWithoutExtension(t *testing.T) {
 
 	ok, msg := checkSMTPStartTLS(context.Background(), listener.Addr().String(), "", "")
 	<-done
-	if !ok || !strings.Contains(msg, "starttls") {
-		t.Fatalf("got ok=%v msg=%q", ok, msg)
+	if ok || !strings.Contains(strings.ToLower(msg), "starttls") {
+		t.Fatalf("expected fail-closed STARTTLS result, got ok=%v msg=%q", ok, msg)
 	}
 }
 

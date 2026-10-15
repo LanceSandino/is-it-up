@@ -4,9 +4,11 @@ package checks
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -81,9 +83,36 @@ func checkRabbitAMQP(ctx context.Context, address, user, password, vhost string)
 	if vhost == "" {
 		vhost = "/"
 	}
-	uri := fmt.Sprintf("amqp://%s@%s/%s", url.UserPassword(user, password).String(), address, url.PathEscape(vhost))
+	scheme := "amqp"
+	hostPort := address
+	skipVerify := false
+	if strings.HasPrefix(address, "amqps://") {
+		scheme = "amqps"
+		hostPort = strings.TrimPrefix(address, "amqps://")
+	} else if strings.HasPrefix(address, "amqps+insecure://") {
+		scheme = "amqps"
+		hostPort = strings.TrimPrefix(address, "amqps+insecure://")
+		skipVerify = true
+	} else if strings.HasPrefix(address, "amqp://") {
+		hostPort = strings.TrimPrefix(address, "amqp://")
+	}
+	uri := fmt.Sprintf("%s://%s@%s/%s", scheme, url.UserPassword(user, password).String(), hostPort, url.PathEscape(vhost))
+	config := amqp.Config{
+		Locale:    "en_US",
+		FrameSize: 128 << 10,
+		Dial:      amqp.DefaultDial(timeoutFromContext(ctx, 4*time.Second)),
+	}
+	if scheme == "amqps" {
+		host, _, err := net.SplitHostPort(hostPort)
+		if err != nil {
+			return false, fmt.Sprintf("invalid RabbitMQ TLS address: %v", err)
+		}
+		config.TLSClientConfig = &tls.Config{
+			ServerName: host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: skipVerify, // #nosec G402 - explicit skip-verify mode
+		}
+	}
 	// Use a short dial timeout via amqp's DefaultDial helper
-	conn, err := amqpDialFn(uri, amqp.Config{Locale: "en_US", Dial: amqp.DefaultDial(timeoutFromContext(ctx, 4*time.Second))})
+	conn, err := amqpDialFn(uri, config)
 	if err != nil {
 		return false, redactText(err.Error(), user, password)
 	}

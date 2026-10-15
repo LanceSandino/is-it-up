@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // ResolveConfigSecrets resolves any sm:// secret references found in the
@@ -30,6 +30,7 @@ func ResolveConfigSecrets(ctx context.Context, cfg *Config, fetcher secrets.Secr
 				return nil
 			}
 			if sv.IsRef() {
+				sv.Sensitive = true
 				v, err := sv.Resolve(ctx, fetcher)
 				if err != nil {
 					return &CheckFieldError{Check: c.Name, Field: name, Err: err}
@@ -74,6 +75,7 @@ func ResolveConfigSecrets(ctx context.Context, cfg *Config, fetcher secrets.Secr
 		}
 		// If address is still empty but host and port are present, compose address
 		if c.Address.IsEmpty() && c.Host.HasValue() && c.Port.HasValue() {
+			addressSensitive := c.Protocol.Sensitive || c.Host.Sensitive || c.Port.Sensitive
 			switch strings.ToLower(c.Type) {
 			case "http", "elasticsearch", "opensearch":
 				proto := c.Protocol.String()
@@ -86,6 +88,7 @@ func ResolveConfigSecrets(ctx context.Context, cfg *Config, fetcher secrets.Secr
 				c.Address.Raw = fmt.Sprintf("%s:%s", c.Host.String(), c.Port.String())
 				c.Address.Ref = nil
 			}
+			c.Address.Sensitive = addressSensitive
 			// Clear host and port fields to avoid validation conflicts
 			c.Host = secrets.SecretValue{}
 			c.Port = secrets.SecretValue{}

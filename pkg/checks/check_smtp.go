@@ -5,14 +5,40 @@ package checks
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/smtp"
 	"strings"
 	"time"
 
-	"github.com/LanceSandino/is-it-up/pkg/logger"
+	"github.com/LanceSandino/is-it-up/v2/pkg/logger"
 )
+
+const maxSMTPResponseBytes int64 = 64 << 10
+
+var errSMTPResponseLimit = errors.New("smtp response limit exceeded")
+
+type smtpReadLimitConn struct {
+	net.Conn
+	remaining int64
+}
+
+func newSMTPReadLimitConn(conn net.Conn) net.Conn {
+	return &smtpReadLimitConn{Conn: conn, remaining: maxSMTPResponseBytes}
+}
+
+func (c *smtpReadLimitConn) Read(p []byte) (int, error) {
+	if c.remaining <= 0 {
+		return 0, errSMTPResponseLimit
+	}
+	if int64(len(p)) > c.remaining {
+		p = p[:c.remaining]
+	}
+	n, err := c.Conn.Read(p)
+	c.remaining -= int64(n)
+	return n, err
+}
 
 // checkSMTP performs SMTP connectivity and authentication verification.
 // It connects to the SMTP server, negotiates encryption if specified, and attempts
@@ -78,24 +104,24 @@ func checkSMTPSSL(ctx context.Context, addr, user, pass string) (bool, string) {
 	d := &net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		checkErr := NewCheckError("smtp", "", "ssl_connect", err)
+		checkErr := NewCheckError("smtp", "", "ssl_connect", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() { _ = conn.Close() }()
 	if err := setConnectionDeadline(ctx, conn, 10*time.Second); err != nil {
-		checkErr := NewCheckError("smtp", "", "ssl_deadline", err)
+		checkErr := NewCheckError("smtp", "", "ssl_deadline", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 
 	tlsConn := tls.Client(conn, config)
 	if err := tlsConn.Handshake(); err != nil {
-		checkErr := NewCheckError("smtp", "", "ssl_handshake", err)
+		checkErr := NewCheckError("smtp", "", "ssl_handshake", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 
-	client, err := smtp.NewClient(tlsConn, strings.Split(addr, ":")[0])
+	client, err := smtp.NewClient(newSMTPReadLimitConn(tlsConn), strings.Split(addr, ":")[0])
 	if err != nil {
-		checkErr := NewCheckError("smtp", "", "ssl_smtp_client", err)
+		checkErr := NewCheckError("smtp", "", "ssl_smtp_client", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() {
@@ -115,18 +141,18 @@ func checkSMTPStartTLS(ctx context.Context, addr, user, pass string) (bool, stri
 	d := &net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		checkErr := NewCheckError("smtp", "", "starttls_connect", err)
+		checkErr := NewCheckError("smtp", "", "starttls_connect", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() { _ = conn.Close() }()
 	if err := setConnectionDeadline(ctx, conn, 10*time.Second); err != nil {
-		checkErr := NewCheckError("smtp", "", "starttls_deadline", err)
+		checkErr := NewCheckError("smtp", "", "starttls_deadline", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 
-	client, err := smtp.NewClient(conn, strings.Split(addr, ":")[0])
+	client, err := smtp.NewClient(newSMTPReadLimitConn(conn), strings.Split(addr, ":")[0])
 	if err != nil {
-		checkErr := NewCheckError("smtp", "", "starttls_smtp_client", err)
+		checkErr := NewCheckError("smtp", "", "starttls_smtp_client", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() {
@@ -141,9 +167,11 @@ func checkSMTPStartTLS(ctx context.Context, addr, user, pass string) (bool, stri
 	if ok, _ := client.Extension("STARTTLS"); ok {
 		config := &tls.Config{ServerName: strings.Split(addr, ":")[0], MinVersion: tls.VersionTLS12}
 		if err := client.StartTLS(config); err != nil {
-			checkErr := NewCheckError("smtp", "", "starttls", err)
+			checkErr := NewCheckError("smtp", "", "starttls", errors.New(redactText(err.Error(), user, pass)))
 			return false, checkErr.Error()
 		}
+	} else {
+		return false, "smtp STARTTLS required but server did not advertise STARTTLS"
 	}
 
 	return authenticateAndTest(client, user, pass, "starttls", strings.Split(addr, ":")[0])
@@ -155,18 +183,18 @@ func checkSMTPPlain(ctx context.Context, addr, user, pass string) (bool, string)
 	d := &net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		checkErr := NewCheckError("smtp", "", "plain_connect", err)
+		checkErr := NewCheckError("smtp", "", "plain_connect", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() { _ = conn.Close() }()
 	if err := setConnectionDeadline(ctx, conn, 10*time.Second); err != nil {
-		checkErr := NewCheckError("smtp", "", "plain_deadline", err)
+		checkErr := NewCheckError("smtp", "", "plain_deadline", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 
-	client, err := smtp.NewClient(conn, strings.Split(addr, ":")[0])
+	client, err := smtp.NewClient(newSMTPReadLimitConn(conn), strings.Split(addr, ":")[0])
 	if err != nil {
-		checkErr := NewCheckError("smtp", "", "plain_smtp_client", err)
+		checkErr := NewCheckError("smtp", "", "plain_smtp_client", errors.New(redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() {
@@ -187,7 +215,7 @@ func authenticateAndTest(client *smtp.Client, user, pass, encType, hostname stri
 		// Try different auth mechanisms
 		auth := smtp.PlainAuth("", user, pass, hostname)
 		if err := client.Auth(auth); err != nil {
-			checkErr := NewCheckError("smtp", "", "auth", err)
+			checkErr := NewCheckError("smtp", "", "auth", errors.New(redactText(err.Error(), user, pass)))
 			return false, checkErr.Error()
 		}
 		return true, fmt.Sprintf("smtp auth ok (%s)", encType)

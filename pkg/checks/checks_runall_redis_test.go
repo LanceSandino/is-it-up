@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestRunAll_Redis_InfoBehavior_FailureWarning tests Redis INFO behavior when PING succeeds but INFO fails.

@@ -4,12 +4,50 @@ package checks
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
+
+func dialRedis(ctx context.Context, address string, timeout time.Duration) (net.Conn, error) {
+	secure := false
+	skipVerify := false
+	endpoint := address
+	if strings.Contains(address, "://") {
+		parsed, err := url.Parse(address)
+		if err != nil {
+			return nil, err
+		}
+		switch parsed.Scheme {
+		case "rediss":
+			secure = true
+		case "rediss+insecure":
+			secure = true
+			skipVerify = true
+		case "redis":
+		default:
+			return nil, fmt.Errorf("unsupported Redis scheme %q", parsed.Scheme)
+		}
+		endpoint = parsed.Host
+	}
+
+	dialer := &net.Dialer{Timeout: timeout}
+	if !secure {
+		return dialer.DialContext(ctx, "tcp", endpoint)
+	}
+	host, _, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Redis TLS address: %w", err)
+	}
+	tlsDialer := &tls.Dialer{NetDialer: dialer, Config: &tls.Config{
+		ServerName: host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: skipVerify, // #nosec G402 - explicit skip-verify mode
+	}}
+	return tlsDialer.DialContext(ctx, "tcp", endpoint)
+}
 
 // redisCommand encodes arguments as RESP bulk strings so values cannot inject commands.
 func redisCommand(args ...string) []byte {
@@ -33,10 +71,9 @@ func redisCommand(args ...string) []byte {
 // lightweight fake server.
 func checkRedis(ctx context.Context, address, password string) (bool, string) {
 	timeout := timeoutFromContext(ctx, 3*time.Second)
-	d := net.Dialer{Timeout: timeout}
-	conn, err := d.DialContext(ctx, "tcp", address)
+	conn, err := dialRedis(ctx, address, timeout)
 	if err != nil {
-		checkErr := NewCheckError("redis", address, "connect", err)
+		checkErr := NewCheckError("redis", address, "connect", fmt.Errorf("%s", redactText(err.Error(), password)))
 		return false, checkErr.Error()
 	}
 	defer func() { _ = conn.Close() }()
@@ -45,44 +82,43 @@ func checkRedis(ctx context.Context, address, password string) (bool, string) {
 	// If password provided, send AUTH first
 	if password != "" {
 		if _, err := conn.Write(redisCommand("AUTH", password)); err != nil {
-			checkErr := NewCheckError("redis", address, "auth", err)
+			checkErr := NewCheckError("redis", address, "auth", fmt.Errorf("%s", redactText(err.Error(), password)))
 			return false, checkErr.Error()
 		}
 		buf := make([]byte, 512)
 		n, err := conn.Read(buf)
 		if err != nil {
-			checkErr := NewCheckError("redis", address, "auth_response", err)
+			checkErr := NewCheckError("redis", address, "auth_response", fmt.Errorf("%s", redactText(err.Error(), password)))
 			return false, checkErr.Error()
 		}
 		resp := string(buf[:n])
 		if strings.HasPrefix(resp, "-ERR") || strings.Contains(strings.ToLower(resp), "invalid") || strings.Contains(strings.ToLower(resp), "noauth") {
-			return false, strings.TrimSpace(resp)
+			return false, redactText(strings.TrimSpace(resp), password)
 		}
 	}
 
 	// Send PING
 	if _, err := conn.Write(redisCommand("PING")); err != nil {
-		checkErr := NewCheckError("redis", address, "ping", err)
+		checkErr := NewCheckError("redis", address, "ping", fmt.Errorf("%s", redactText(err.Error(), password)))
 		return false, checkErr.Error()
 	}
 	buf := make([]byte, 512)
 	n, err := conn.Read(buf)
 	if err != nil {
-		checkErr := NewCheckError("redis", address, "ping_response", err)
+		checkErr := NewCheckError("redis", address, "ping_response", fmt.Errorf("%s", redactText(err.Error(), password)))
 		return false, checkErr.Error()
 	}
 	resp := string(buf[:n])
 	if strings.Contains(resp, "PONG") {
 		return true, "pong"
 	}
-	return false, "no pong: " + strings.TrimSpace(resp)
+	return false, "no pong: " + redactText(strings.TrimSpace(resp), password)
 }
 
 // checkRedisInfo sends an INFO command and parses a few useful keys.
 func checkRedisInfo(ctx context.Context, address, password string) (bool, string) {
 	timeout := timeoutFromContext(ctx, 3*time.Second)
-	d := net.Dialer{Timeout: timeout}
-	conn, err := d.DialContext(ctx, "tcp", address)
+	conn, err := dialRedis(ctx, address, timeout)
 	if err != nil {
 		return false, err.Error()
 	}

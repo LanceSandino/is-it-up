@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestRunAll_MySQL_DirectConnectionFail tests MySQL check behavior when database connection fails.
