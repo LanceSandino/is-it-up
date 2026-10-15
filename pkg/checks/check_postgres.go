@@ -6,10 +6,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/LanceSandino/is-it-up/pkg/logger"
+	"github.com/LanceSandino/is-it-up/v2/pkg/logger"
 	_ "github.com/lib/pq"
 )
 
@@ -51,10 +53,17 @@ func checkPostgres(ctx context.Context, cfg CheckConfig) (bool, string) {
 			addr = "127.0.0.1:5432"
 		}
 	}
+	sslMode := strings.TrimSpace(cfg.TLSMode)
+	if sslMode == "" {
+		sslMode = "verify-full"
+	}
+	connectTimeout := postgresConnectTimeout(ctx)
+
 	var dsn string
-	if strings.Contains(addr, "=") || strings.Contains(addr, " ") {
-		// If addr looks like a full DSN, use it as-is
-		dsn = addr
+	if !strings.HasPrefix(addr, "postgres://") && !strings.HasPrefix(addr, "postgresql://") && (strings.Contains(addr, "=") || strings.Contains(addr, " ")) {
+		// lib/pq applies the last duplicate keyword. Append canonical policy so
+		// an embedded or secret-derived component cannot override it.
+		dsn = strings.TrimSpace(addr) + " sslmode='" + sslMode + "' connect_timeout='" + strconv.Itoa(connectTimeout) + "'"
 	} else {
 		if user == "" {
 			user = "postgres"
@@ -62,39 +71,58 @@ func checkPostgres(ctx context.Context, cfg CheckConfig) (bool, string) {
 		if db == "" {
 			db = "postgres"
 		}
-		// Build DSN for PostgreSQL
-		// Format: postgres://<user>:<credential>@host:port/dbname?sslmode=...
-		base := fmt.Sprintf("postgres://%s:%s@%s/%s", user, pass, addr, db)
-
-		// Allow per-check TLS mode configured via canonical CheckConfig.TLSMode
-		sslMode := strings.TrimSpace(cfg.TLSMode)
-		if sslMode == "" {
-			sslMode = "require" // Default to require TLS for security
+		var parsed *url.URL
+		var err error
+		if strings.HasPrefix(addr, "postgres://") || strings.HasPrefix(addr, "postgresql://") {
+			parsed, err = url.Parse(addr)
+			if err != nil {
+				return false, NewCheckError("postgres", cfg.Name, "config", err).Error()
+			}
+			if cfg.User.HasValue() || cfg.Password.HasValue() {
+				parsed.User = url.UserPassword(user, pass)
+			}
+			if cfg.Database.HasValue() {
+				parsed.Path = "/" + db
+			}
+		} else {
+			parsed = &url.URL{Scheme: "postgres", User: url.UserPassword(user, pass), Host: addr, Path: "/" + db}
 		}
-
-		dsn = base + "?sslmode=" + sslMode
+		query := parsed.Query()
+		query.Set("sslmode", sslMode)
+		query.Set("connect_timeout", strconv.Itoa(connectTimeout))
+		parsed.RawQuery = query.Encode()
+		dsn = parsed.String()
 	}
 
 	tctx, cancel := contextWithDefaultTimeout(ctx, 4*time.Second)
 	defer cancel()
 	dbh, err := sqlOpenPostgres("postgres", dsn)
 	if err != nil {
-		checkErr := NewCheckError("postgres", cfg.Name, "connect", err)
+		checkErr := NewCheckError("postgres", cfg.Name, "connect", fmt.Errorf("%s", redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	defer func() { _ = dbh.Close() }()
 	if err := dbh.PingContext(tctx); err != nil {
-		checkErr := NewCheckError("postgres", cfg.Name, "ping", err)
+		checkErr := NewCheckError("postgres", cfg.Name, "ping", fmt.Errorf("%s", redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	var one int
 	row := dbh.QueryRowContext(tctx, "SELECT 1")
 	if err := row.Scan(&one); err != nil {
-		checkErr := NewCheckError("postgres", cfg.Name, "select", err)
+		checkErr := NewCheckError("postgres", cfg.Name, "select", fmt.Errorf("%s", redactText(err.Error(), user, pass)))
 		return false, checkErr.Error()
 	}
 	if one == 1 {
 		return true, "select 1 ok"
 	}
 	return false, "unexpected select result"
+}
+
+func postgresConnectTimeout(ctx context.Context) int {
+	timeout := timeoutFromContext(ctx, 4*time.Second)
+	seconds := int((timeout + time.Second - 1) / time.Second)
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
 }

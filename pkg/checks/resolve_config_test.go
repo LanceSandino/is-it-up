@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // simpleFetcher is a mock SecretFetcher for testing that returns predefined values.

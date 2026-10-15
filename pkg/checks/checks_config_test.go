@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestCheckRedis_AuthFail verifies that checkRedis returns false when the
@@ -109,8 +109,8 @@ func TestCheckMySQL_DSNAndTLS(t *testing.T) {
 	if !ok2 {
 		t.Fatalf("expected ok for full DSN, got: %s", msg2)
 	}
-	if capturedDSN != full {
-		t.Fatalf("expected DSN to be used verbatim, got: %s", capturedDSN)
+	if !strings.Contains(capturedDSN, "tls=true") || !strings.Contains(capturedDSN, "param=1") || !strings.Contains(capturedDSN, "timeout=4s") {
+		t.Fatalf("expected full DSN options with canonical secure transport and timeout, got: %s", capturedDSN)
 	}
 	if err := mock2.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations for second db: %v", err)

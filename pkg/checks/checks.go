@@ -13,7 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
@@ -64,6 +64,62 @@ type Result struct {
 	Timestamp time.Time     `json:"timestamp"`
 	Duration  time.Duration `json:"duration_ms"`
 	Details   string        `json:"details,omitempty"`
+}
+
+func sanitizeResult(config CheckConfig, result Result) Result {
+	values := []secrets.SecretValue{
+		config.Address, config.Protocol, config.Host, config.Port, config.Path,
+		config.Database, config.User, config.Password, config.Vhost,
+		config.SMTPEncryption,
+	}
+	sensitive := make([]string, 0, len(values))
+	for _, value := range values {
+		if value.Sensitive && value.String() != "" {
+			sensitive = append(sensitive, value.String())
+		}
+	}
+	result.Message = redactText(result.Message, sensitive...)
+	result.Details = redactText(result.Details, sensitive...)
+	return result
+}
+
+func runCheckSafely(checkType, checkName string, check func() (bool, string)) (ok bool, message string) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+			message = NewCheckError(checkType, checkName, "panic", errors.New("checker panic recovered")).Error()
+		}
+	}()
+	return check()
+}
+
+func credentialTransportAddress(config CheckConfig, secureScheme string) string {
+	address := config.Address.String()
+	mode := strings.ToLower(strings.TrimSpace(config.TLSMode))
+	if mode == "disable" || (mode == "" && !config.Password.HasValue()) {
+		return address
+	}
+	securePrefix := secureScheme + "://"
+	insecurePrefix := secureScheme + "+insecure://"
+	plainScheme := strings.TrimSuffix(secureScheme, "s") + "://"
+	if strings.HasPrefix(address, securePrefix) {
+		return address
+	}
+	if strings.HasPrefix(address, insecurePrefix) {
+		address = strings.TrimPrefix(address, insecurePrefix)
+		if mode == "skip-verify" {
+			return insecurePrefix + address
+		}
+		return securePrefix + address
+	}
+	address = strings.TrimPrefix(address, plainScheme)
+	if strings.Contains(address, "://") {
+		return address
+	}
+	if mode == "skip-verify" {
+		return insecurePrefix + address
+	}
+	return securePrefix + address
 }
 
 func (r Result) String() string {
@@ -216,7 +272,7 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
 		case "mysql":
 			// Direct database connection and SELECT 1 query (includes connectivity test)
-			ok, msg := checkMySQLFn(checkCtx, c)
+			ok, msg := runCheckSafely("mysql", c.Name, func() (bool, string) { return checkMySQLFn(checkCtx, c) })
 			detail := func() string {
 				user := c.User.String()
 				if user == "" {
@@ -235,7 +291,7 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
 		case "postgres":
 			// Direct database connection and SELECT 1 query (includes connectivity test)
-			ok, msg := checkPostgresFn(checkCtx, c)
+			ok, msg := runCheckSafely("postgres", c.Name, func() (bool, string) { return checkPostgresFn(checkCtx, c) })
 			detail := func() string {
 				user := c.User.String()
 				if user == "" {
@@ -247,7 +303,7 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 				}
 				sslMode := c.TLSMode
 				if sslMode == "" {
-					sslMode = "require"
+					sslMode = "verify-full"
 				}
 				action := fmt.Sprintf("postgres SELECT 1 on %s as user=%s password=%s sslmode=%s", redactAddress(c.Address.String()), user, pwd, sslMode)
 				if ok {
@@ -257,7 +313,8 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 			}()
 			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
 		case "redis":
-			ok, msg := checkRedisFn(checkCtx, c.Address.String(), c.Password.String())
+			redisAddress := credentialTransportAddress(c, "rediss")
+			ok, msg := checkRedisFn(checkCtx, redisAddress, c.Password.String())
 			// build detail including masked password
 			pwd := "(none)"
 			if c.Password.HasValue() {
@@ -266,9 +323,9 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 			detail := fmt.Sprintf("redis PING to %s auth=%s", redactAddress(c.Address.String()), pwd)
 			// optionally run INFO parsing if requested
 			if ok && c.RedisInfo {
-				if iok, imsg := checkRedisInfoFn(checkCtx, c.Address.String(), c.Password.String()); !iok {
+				if iok, imsg := checkRedisInfoFn(checkCtx, redisAddress, c.Password.String()); !iok {
 					// prefer to mark as warning but keep original ok=false only if INFO fails critically
-					r = Result{Name: c.Name, OK: false, Message: "info: " + imsg, Severity: "warning", Timestamp: time.Now(), Duration: time.Since(start), Details: detail + "; info error: " + imsg}
+					r = sanitizeResult(c, Result{Name: c.Name, OK: false, Message: "info: " + imsg, Severity: "warning", Timestamp: time.Now(), Duration: time.Since(start), Details: detail + "; info error: " + imsg})
 					results = append(results, r)
 					cancel()
 					continue
@@ -295,18 +352,20 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 		case "rabbitmq":
 			// Default behavior: attempt AMQP connect+open-channel. If that fails,
 			// fall back to a basic TCP connect to ensure we can still report reachability.
-			ok, msg := checkRabbitAMQPFn(checkCtx, c.Address.String(), c.User.String(), c.Password.String(), c.Vhost.String())
+			rabbitAddress := credentialTransportAddress(c, "amqps")
+			ok, msg := checkRabbitAMQPFn(checkCtx, rabbitAddress, c.User.String(), c.Password.String(), c.Vhost.String())
 			detail := fmt.Sprintf("amqp connect to %s vhost=%s", redactAddress(c.Address.String()), c.Vhost.String())
 			if ok {
 				r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
 				break
 			}
-			// AMQP failed — attempt TCP fallback
-			if tock, tmsg := checkTCPFn(checkCtx, c.Address.String()); tock {
-				// TCP succeeded — report TCP result
-				tdetail := fmt.Sprintf("tcp connect to %s", redactAddress(c.Address.String()))
-				r = Result{Name: c.Name, OK: true, Message: tmsg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: tdetail}
-				break
+			// Preserve legacy reachability fallback only for anonymous checks.
+			if !c.Password.HasValue() {
+				if tock, tmsg := checkTCPFn(checkCtx, c.Address.String()); tock {
+					tdetail := fmt.Sprintf("tcp connect to %s", redactAddress(c.Address.String()))
+					r = Result{Name: c.Name, OK: true, Message: tmsg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: tdetail}
+					break
+				}
 			}
 			// Both AMQP and TCP failed — report AMQP failure details (include TCP msg)
 			detail = detail + "; amqp_error: " + msg
@@ -342,7 +401,7 @@ func RunAll(ctx context.Context, cfg *Config) []Result {
 		default:
 			r = Result{Name: c.Name, OK: false, Message: "unknown check type", Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start)}
 		}
-		results = append(results, r)
+		results = append(results, sanitizeResult(c, r))
 		cancel()
 	}
 	return results
@@ -360,9 +419,21 @@ func RedactedConfig(cfg *Config, _ bool) *Config {
 	out := &Config{Checks: make([]CheckConfig, 0, len(cfg.Checks))}
 	for _, c := range cfg.Checks {
 		nc := c
-		if nc.Password.HasValue() {
-			nc.Password = secrets.SecretValue{Raw: "REDACTED"}
+		redactSecretValue := func(value *secrets.SecretValue, always bool) {
+			if value.HasValue() && (always || value.Sensitive) {
+				*value = secrets.SecretValue{Raw: "REDACTED", Sensitive: true}
+			}
 		}
+		redactSecretValue(&nc.Address, false)
+		redactSecretValue(&nc.Protocol, false)
+		redactSecretValue(&nc.Host, false)
+		redactSecretValue(&nc.Port, false)
+		redactSecretValue(&nc.Path, false)
+		redactSecretValue(&nc.Database, false)
+		redactSecretValue(&nc.User, false)
+		redactSecretValue(&nc.Password, true)
+		redactSecretValue(&nc.Vhost, false)
+		redactSecretValue(&nc.SMTPEncryption, false)
 		out.Checks = append(out.Checks, nc)
 	}
 	return out

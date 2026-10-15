@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestRunAll_Postgres_DirectConnectionFail tests PostgreSQL check behavior when database connection fails.

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestCheckPostgres_SelectOK tests successful PostgreSQL connection and SELECT 1 query execution.
@@ -56,7 +56,7 @@ func TestCheckPostgres_DSNFromAddress(t *testing.T) {
 	orig := sqlOpenPostgres
 	sqlOpenPostgres = func(driverName, dataSourceName string) (*sql.DB, error) {
 		// Verify the DSN passed is exactly what we provided
-		expectedDSN := "postgres://user:pass@host:5432/db?sslmode=require"
+		expectedDSN := "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=verify-full"
 		if dataSourceName != expectedDSN {
 			t.Errorf("expected DSN %q, got %q", expectedDSN, dataSourceName)
 		}
@@ -92,7 +92,7 @@ func TestCheckPostgres_HostPortConstruction(t *testing.T) {
 	orig := sqlOpenPostgres
 	sqlOpenPostgres = func(driverName, dataSourceName string) (*sql.DB, error) {
 		// Verify DSN construction from Host/Port
-		expectedDSN := "postgres://testuser:testpass@testhost:5433/testdb?sslmode=require"
+		expectedDSN := "postgres://testuser:testpass@testhost:5433/testdb?connect_timeout=4&sslmode=verify-full"
 		if dataSourceName != expectedDSN {
 			t.Errorf("expected DSN %q, got %q", expectedDSN, dataSourceName)
 		}
@@ -132,7 +132,7 @@ func TestCheckPostgres_DefaultValues(t *testing.T) {
 	orig := sqlOpenPostgres
 	sqlOpenPostgres = func(driverName, dataSourceName string) (*sql.DB, error) {
 		// Verify defaults: user=postgres, db=postgres, port=5432, sslmode=require
-		expectedDSN := "postgres://postgres:@127.0.0.1:5432/postgres?sslmode=require"
+		expectedDSN := "postgres://postgres:@127.0.0.1:5432/postgres?connect_timeout=4&sslmode=verify-full"
 		if dataSourceName != expectedDSN {
 			t.Errorf("expected DSN %q, got %q", expectedDSN, dataSourceName)
 		}
@@ -164,12 +164,12 @@ func TestCheckPostgres_SSLModes(t *testing.T) {
 		sslMode  string
 		expected string
 	}{
-		{"default require", "", "postgres://user:pass@host:5432/db?sslmode=require"},
-		{"explicit require", "require", "postgres://user:pass@host:5432/db?sslmode=require"},
-		{"disable", "disable", "postgres://user:pass@host:5432/db?sslmode=disable"},
-		{"prefer", "prefer", "postgres://user:pass@host:5432/db?sslmode=prefer"},
-		{"verify-ca", "verify-ca", "postgres://user:pass@host:5432/db?sslmode=verify-ca"},
-		{"verify-full", "verify-full", "postgres://user:pass@host:5432/db?sslmode=verify-full"},
+		{"default verify-full", "", "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=verify-full"},
+		{"explicit require", "require", "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=require"},
+		{"disable", "disable", "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=disable"},
+		{"prefer", "prefer", "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=prefer"},
+		{"verify-ca", "verify-ca", "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=verify-ca"},
+		{"verify-full", "verify-full", "postgres://user:pass@host:5432/db?connect_timeout=4&sslmode=verify-full"},
 	}
 
 	for _, tt := range tests {

@@ -23,6 +23,23 @@ tar -C "$PAYLOAD" -czf "$FIXTURE/is-it-up_linux_amd64.tar.gz" .
 )
 
 INSTALL_ROOT="$TEST_ROOT/root"
+REAL_CURL=$(command -v curl)
+FAKE_BIN="$TEST_ROOT/fake-bin"
+mkdir -p "$FAKE_BIN"
+cat >"$FAKE_BIN/curl" <<EOF
+#!/bin/sh
+case " \$* " in
+  *audit-installer-token*) echo "token appeared in curl argv" >&2; exit 90 ;;
+esac
+if env | grep -Fq audit-installer-token; then
+  echo "token appeared in curl environment" >&2
+  exit 91
+fi
+exec "$REAL_CURL" "\$@"
+EOF
+chmod 0755 "$FAKE_BIN/curl"
+PATH="$FAKE_BIN:$PATH" \
+GH_TOKEN=audit-installer-token \
 IS_IT_UP_OS=linux \
 IS_IT_UP_ARCH=amd64 \
 IS_IT_UP_DOWNLOAD_BASE_URL="file://$FIXTURE" \

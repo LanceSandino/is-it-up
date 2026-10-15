@@ -19,6 +19,7 @@ checks:
     address: localhost:3306
     user: appuser
     password: apppass
+    tls_mode: disable  # Explicit plaintext mode for the local development stack
     timeout_ms: 10000  # 10 second timeout for database
     severity: critical
 
@@ -38,6 +39,7 @@ checks:
     user: guest
     password: guest
     vhost: /
+    tls_mode: disable  # Explicit plaintext mode for the local development stack
     timeout_ms: 3000  # 3 second timeout for message queue
     severity: critical
 
@@ -52,6 +54,7 @@ checks:
     type: redis
     address: localhost:6379
     password: redispass
+    tls_mode: disable  # Explicit plaintext mode for the local development stack
     redis_info: true
     timeout_ms: 3000  # 3 second timeout for cache
     severity: critical

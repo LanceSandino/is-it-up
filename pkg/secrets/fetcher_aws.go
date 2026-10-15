@@ -74,6 +74,7 @@ func (a *AWSSecretsFetcher) GetSecret(ctx context.Context, ref *SecretRef) (stri
 	if ref.Region != "" {
 		cacheKey = ref.Region + "|" + ref.SecretID
 	}
+	cacheKey += "|stage=" + ref.Stage
 	if v, ok := a.cache.Load(cacheKey); ok {
 		cs := v.(cachedSecret)
 		if time.Since(cs.ts) < DefaultSecretCacheTTL {
@@ -84,6 +85,9 @@ func (a *AWSSecretsFetcher) GetSecret(ctx context.Context, ref *SecretRef) (stri
 	// Use singleflight to dedupe concurrent fetches for the same secret.
 	v, err, _ := a.group.Do(cacheKey, func() (interface{}, error) {
 		in := &sm.GetSecretValueInput{SecretId: &ref.SecretID}
+		if ref.Stage != "" {
+			in.VersionStage = aws.String(ref.Stage)
+		}
 		resp, err := clientToUse.GetSecretValue(ctx, in)
 		if err != nil {
 			return nil, err

@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,6 +57,29 @@ type Loggable interface {
 	GetTimestamp() time.Time
 	GetDuration() time.Duration
 	GetDetails() string
+}
+
+func escapeConsoleText(value string) string {
+	value = strings.ToValidUTF8(value, "�")
+	var out strings.Builder
+	for _, r := range value {
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) || r == '\u2028' || r == '\u2029' {
+			switch r {
+			case '\n':
+				out.WriteString(`\n`)
+			case '\r':
+				out.WriteString(`\r`)
+			case '\t':
+				out.WriteString(`\t`)
+			default:
+				quoted := strconv.QuoteToASCII(string(r))
+				out.WriteString(quoted[1 : len(quoted)-1])
+			}
+			continue
+		}
+		out.WriteRune(r)
+	}
+	return out.String()
 }
 
 // New creates a new logger with the specified service version.
@@ -280,6 +305,10 @@ func (l *Logger) Log(r interface{}) {
 		}
 
 		// Pretty/console output: human-readable format
+		name = escapeConsoleText(name)
+		resultMsg = escapeConsoleText(resultMsg)
+		severity = escapeConsoleText(severity)
+		details = escapeConsoleText(details)
 		statusStr := "OK"
 		if !okv {
 			statusStr = "FAIL"
@@ -398,6 +427,10 @@ func (l *Logger) Log(r interface{}) {
 	}
 
 	// Pretty/console output: human-readable format
+	name = escapeConsoleText(name)
+	resultMsg = escapeConsoleText(resultMsg)
+	severity = escapeConsoleText(severity)
+	details = escapeConsoleText(details)
 	statusStr := "OK"
 	if !okv {
 		statusStr = "FAIL"

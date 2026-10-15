@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -54,7 +53,7 @@ func checkElasticsearch(ctx context.Context, address, path string) (bool, string
 	}()
 
 	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedHTTPBody(resp.Body)
 	if err != nil {
 		checkErr := NewCheckError("elasticsearch", redactAddress(address), "read response", err)
 		return false, checkErr.Error()

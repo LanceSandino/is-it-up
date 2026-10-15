@@ -53,8 +53,9 @@ func (r *SecretRef) String() string {
 
 // SecretValue holds either a raw literal or a SecretRef reference.
 type SecretValue struct {
-	Raw string
-	Ref *SecretRef
+	Raw       string
+	Ref       *SecretRef
+	Sensitive bool `json:"-" yaml:"-"`
 }
 
 // IsEmpty reports whether the SecretValue has no literal or reference.
@@ -186,6 +187,7 @@ func (s *SecretValue) UnmarshalYAML(node *yaml.Node) error {
 				return err
 			}
 			s.Ref = ref
+			s.Sensitive = true
 			return nil
 		}
 		s.Raw = v
@@ -205,6 +207,7 @@ func (s *SecretValue) UnmarshalYAML(node *yaml.Node) error {
 				r.Provider = "aws-secrets-manager"
 			}
 			s.Ref = &r
+			s.Sensitive = true
 			return nil
 		}
 		b, _ := yaml.Marshal(m)
@@ -214,6 +217,7 @@ func (s *SecretValue) UnmarshalYAML(node *yaml.Node) error {
 				r2.Provider = "aws-secrets-manager"
 			}
 			s.Ref = &r2
+			s.Sensitive = true
 			return nil
 		}
 		return fmt.Errorf("invalid secret mapping")

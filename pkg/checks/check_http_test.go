@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LanceSandino/is-it-up/pkg/secrets"
+	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
 // TestCheckHTTP_StatusCodes tests HTTP check behavior with various HTTP status codes.

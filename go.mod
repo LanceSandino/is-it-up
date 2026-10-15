@@ -1,4 +1,4 @@
-module github.com/LanceSandino/is-it-up
+module github.com/LanceSandino/is-it-up/v2
 
 go 1.27.2
 

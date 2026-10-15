@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -158,6 +159,29 @@ func TestAWSSecretsFetcher_CachingAndSingleflight(t *testing.T) {
 	}
 }
 
+func TestAWSFetcherBindsAndIsolatesVersionStage(t *testing.T) {
+	fake := &stageAwareSMClient{values: map[string]string{
+		"AWSCURRENT": "current-value",
+		"AWSPENDING": "pending-value",
+	}}
+	fetcher := &AWSSecretsFetcher{client: fake}
+
+	current, err := fetcher.GetSecret(context.Background(), &SecretRef{SecretID: "audit", Stage: "AWSCURRENT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := fetcher.GetSecret(context.Background(), &SecretRef{SecretID: "audit", Stage: "AWSPENDING"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current != "current-value" || pending != "pending-value" {
+		t.Fatalf("stage values collided: current=%q pending=%q", current, pending)
+	}
+	if strings.Join(fake.stages, ",") != "AWSCURRENT,AWSPENDING" {
+		t.Fatalf("VersionStage was not sent on both requests: %#v", fake.stages)
+	}
+}
+
 // Test helper types for AWS fetcher testing
 
 // fakeSMClient simulates AWS Secrets Manager client with configurable behavior
@@ -207,4 +231,25 @@ type fakeEmptyClient struct{}
 
 func (f *fakeEmptyClient) GetSecretValue(ctx context.Context, params *sm.GetSecretValueInput, optFns ...func(*sm.Options)) (*sm.GetSecretValueOutput, error) {
 	return &sm.GetSecretValueOutput{}, nil
+}
+
+type stageAwareSMClient struct {
+	mu     sync.Mutex
+	values map[string]string
+	stages []string
+}
+
+func (f *stageAwareSMClient) GetSecretValue(_ context.Context, params *sm.GetSecretValueInput, _ ...func(*sm.Options)) (*sm.GetSecretValueOutput, error) {
+	stage := "AWSCURRENT"
+	if params.VersionStage != nil {
+		stage = *params.VersionStage
+	}
+	f.mu.Lock()
+	f.stages = append(f.stages, stage)
+	f.mu.Unlock()
+	value, ok := f.values[stage]
+	if !ok {
+		return nil, fmt.Errorf("stage not found: %s", stage)
+	}
+	return &sm.GetSecretValueOutput{SecretString: &value}, nil
 }

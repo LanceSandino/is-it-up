@@ -128,13 +128,24 @@ fi
 
 curl_args=(-fsSL --retry 3 --retry-delay 1)
 if [ -n "${GH_TOKEN:-}" ]; then
-  curl_args+=(-H "Authorization: Bearer $GH_TOKEN")
+	if [[ ! "$GH_TOKEN" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+		echo "GH_TOKEN contains unsupported characters" >&2
+		exit 2
+	fi
 fi
+
+download() {
+	if [ -n "${GH_TOKEN:-}" ]; then
+		printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" | env -u GH_TOKEN curl --config - "${curl_args[@]}" "$@"
+	else
+		curl "${curl_args[@]}" "$@"
+	fi
+}
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/is-it-up-install.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-curl "${curl_args[@]}" "$base/$asset" -o "$work/$asset"
-curl "${curl_args[@]}" "$base/SHA256SUMS" -o "$work/SHA256SUMS"
+download "$base/$asset" -o "$work/$asset"
+download "$base/SHA256SUMS" -o "$work/SHA256SUMS"
 
 expected=$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1; exit }' "$work/SHA256SUMS")
 if [ -z "$expected" ]; then

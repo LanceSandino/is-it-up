@@ -3,6 +3,58 @@
 All notable user-facing changes are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-14
+
+This is a major release because the secure defaults below can make existing
+1.x configurations fail after upgrading.
+
+### Upgrading from 1.x
+
+- MySQL, PostgreSQL, Redis, and RabbitMQ checks that send credentials now
+  require verified TLS by default. If a service only accepts plaintext, set
+  `tls_mode` to the protocol's explicit plaintext or skip-verify mode (see
+  [docs/CHECKS.md](docs/CHECKS.md)). PostgreSQL now defaults to
+  `verify-full` instead of `require`; set `tls_mode: require` explicitly to keep
+  the old encrypted-but-unverified behavior.
+- HTTP checks no longer follow redirects. Point each check at the final URL,
+  or expect a 3xx response to count as healthy (200-399).
+- An HTTP check with `tls_mode: required` and an `http://` URL is now a
+  configuration error.
+- Anonymous RabbitMQ checks may still fall back to TCP reachability; checks
+  with credentials no longer do.
+- The Go module path is now `github.com/LanceSandino/is-it-up/v2`.
+
+### Changed
+
+- Credential-bearing MySQL, PostgreSQL, Redis, and RabbitMQ checks now default
+  to verified TLS. Plaintext and certificate-skipping behavior require an
+  explicit compatibility mode.
+- RabbitMQ TCP fallback is limited to anonymous checks, PostgreSQL connection
+  timeouts follow the check deadline, and database DSNs are built from escaped
+  components.
+- HTTP checks no longer follow redirects and reject `tls_mode: required` with a
+  plaintext URL.
+
+### Security
+
+- Secret provenance is preserved through resolution and all secret-derived
+  fields are redacted from validation errors, peer failures, runtime results,
+  debug output, and resolved-configuration output.
+- MySQL and PostgreSQL malformed-handshake panics are contained per check so an
+  untrusted peer cannot terminate the process.
+- HTTP and Elasticsearch response bodies are limited to 1 MiB, SMTP replies to
+  64 KiB, and RabbitMQ frame size to 128 KiB.
+- SMTP STARTTLS modes now fail closed when the server does not advertise the
+  upgrade.
+- DocumentDB URI options remain intact when TLS overrides are applied, and AWS
+  Secrets Manager version stages are bound to requests and cache identities.
+- Console output escapes untrusted terminal control bytes.
+- The Linux installer passes GitHub authorization to curl over standard input
+  and removes the token from curl's process environment.
+- Release publication rejects a tag that does not target the current `main`
+  commit, and the packaged systemd service and Docker examples apply memory,
+  task/process, and file descriptor ceilings.
+
 ## [1.0.0] - 2026-10-12
 
 ### Added
@@ -49,4 +101,5 @@ All notable user-facing changes are documented here. This project follows
 - Release builds use Go 1.27.2, including the current standard-library security
   fixes, and compatible analysis tools are pinned to their latest stable releases.
 
+[2.0.0]: https://github.com/LanceSandino/is-it-up/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/LanceSandino/is-it-up/releases/tag/v1.0.0

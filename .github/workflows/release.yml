@@ -28,6 +28,13 @@ jobs:
       - name: Scan tagged history for secrets
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
 
+      - name: Verify tag targets the current main commit
+        env:
+          TAG_COMMIT: ${{ github.sha }}
+        run: |
+          git fetch --no-tags origin main
+          test "$TAG_COMMIT" = "$(git rev-parse origin/main)"
+
       - name: Validate release metadata
         env:
           TAG: ${{ github.ref_name }}
