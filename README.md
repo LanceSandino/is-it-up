@@ -14,6 +14,7 @@ licensed under the [MIT License](LICENSE).
 | --- | --- | --- |
 | `http` | HTTP/HTTPS GET; status 200–399 is healthy | `path`, `tls_mode` |
 | `tcp` | A TCP socket can be opened | `address` or `host`/`port` |
+| `dns` | The hostname resolves to at least one address | `host` or `address` |
 | `mysql` | Connect, ping, and `SELECT 1` | `user`, `password`, `database`, `tls_mode` |
 | `postgres` | Connect, ping, and `SELECT 1` | `user`, `password`, `database`, `tls_mode` |
 | `redis` | AUTH when configured, then PING; optional INFO parsing | `password`, `redis_info`, `tls_mode` |
@@ -37,7 +38,7 @@ The recommended installation lets you inspect the script before using `sudo`:
 curl -fsSLo /tmp/install-is-it-up.sh \
   https://raw.githubusercontent.com/LanceSandino/is-it-up/main/scripts/install.sh
 less /tmp/install-is-it-up.sh
-sudo /bin/bash /tmp/install-is-it-up.sh --version 2.0.0
+sudo /bin/bash /tmp/install-is-it-up.sh --version 2.1.0
 is-it-up --version
 ```
 
@@ -62,7 +63,7 @@ Installer options:
 
 ```bash
 sudo /bin/bash /tmp/install-is-it-up.sh \
-  --version 2.0.0 --service --interval 5min
+  --version 2.1.0 --service --interval 5min
 sudoedit /etc/is-it-up/config.yaml
 sudo systemctl start is-it-up.service
 sudo systemctl status is-it-up.service
@@ -89,7 +90,7 @@ long-lived credentials. Restrict that file to `root:is-it-up` with mode `0640`.
 Rerun the installer. Existing `/etc/is-it-up/config.yaml` content is preserved:
 
 ```bash
-sudo /bin/bash /tmp/install-is-it-up.sh --version 2.0.0
+sudo /bin/bash /tmp/install-is-it-up.sh --version 2.1.0
 ```
 
 Omit `--version` to follow the latest GitHub Release.
@@ -206,7 +207,7 @@ Run the published image as a non-root, read-only one-shot container:
 docker run --rm --read-only --network host \
   --user 65532:65532 --cap-drop ALL --memory 128m --pids-limit 64 \
   -v "$PWD/config.yaml:/config/config.yaml:ro" \
-  ghcr.io/lancesandino/is-it-up:2.0.0 \
+  ghcr.io/lancesandino/is-it-up:2.1.0 \
   --config /config/config.yaml --fail-on-unhealthy
 ```
 

@@ -40,7 +40,7 @@ func ValidateResolvedSecrets(cfg *Config) error {
 		fieldPrefix := fmt.Sprintf("checks[%d]", i)
 
 		// Validate SMTP encryption if it was resolved from a secret
-		if check.Type == "smtp" && check.SMTPEncryption.HasValue() {
+		if normalizeCheckType(check.Type) == "smtp" && check.SMTPEncryption.HasValue() {
 			encValue := check.SMTPEncryption.String()
 			if !validateSMTPEncryption(encValue) {
 				value := encValue
@@ -90,27 +90,13 @@ func (errs ValidationErrors) Error() string {
 
 // ConfigValidator provides comprehensive configuration validation.
 type ConfigValidator struct {
-	supportedTypes map[string]bool
-	maxTimeout     time.Duration
-	minTimeout     time.Duration
+	maxTimeout time.Duration
+	minTimeout time.Duration
 }
 
 // NewConfigValidator creates a new configuration validator.
 func NewConfigValidator() *ConfigValidator {
 	return &ConfigValidator{
-		supportedTypes: map[string]bool{
-			"http":          true,
-			"tcp":           true,
-			"mysql":         true,
-			"postgres":      true,
-			"redis":         true,
-			"rabbitmq":      true,
-			"elasticsearch": true,
-			"opensearch":    true,
-			"smtp":          true,
-			"mongo":         true,
-			"documentdb":    true,
-		},
 		maxTimeout: 5 * time.Minute,
 		minTimeout: 1 * time.Second,
 	}
@@ -175,7 +161,7 @@ func (v *ConfigValidator) validateCheck(check CheckConfig, fieldPrefix string) V
 			Message: "check type is required",
 			Check:   check.Name,
 		})
-	} else if !v.supportedTypes[check.Type] {
+	} else if !isRegisteredCheckType(check.Type) {
 		errors = append(errors, ValidationError{
 			Field:   fmt.Sprintf("%s.type", fieldPrefix),
 			Value:   check.Type,
@@ -231,7 +217,7 @@ func (v *ConfigValidator) validateCheck(check CheckConfig, fieldPrefix string) V
 	}
 
 	// Type-specific validation
-	switch check.Type {
+	switch normalizeCheckType(check.Type) {
 	case "http":
 		if check.TLSMode != "" {
 			if check.TLSMode != "skip-verify" && check.TLSMode != "required" {
@@ -308,9 +294,10 @@ func (v *ConfigValidator) validateCheck(check CheckConfig, fieldPrefix string) V
 
 // getSupportedTypes returns a comma-separated list of supported check types.
 func (v *ConfigValidator) getSupportedTypes() string {
-	var types []string
-	for t := range v.supportedTypes {
-		types = append(types, t)
-	}
-	return strings.Join(types, ", ")
+	return strings.Join(SupportedCheckTypes(), ", ")
+}
+
+func isRegisteredCheckType(name string) bool {
+	_, ok := lookupCheckType(name)
+	return ok
 }

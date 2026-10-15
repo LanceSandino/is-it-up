@@ -223,3 +223,29 @@ func TestValidateResolvedSecrets(t *testing.T) {
 		t.Fatalf("expected smtp encryption error, got %v", err)
 	}
 }
+
+func TestConfigValidatorFieldAndTypeSpecificFailures(t *testing.T) {
+	address := secrets.SecretValue{Raw: "service:1234"}
+	host := secrets.SecretValue{Raw: "service"}
+	tests := []struct {
+		name     string
+		check    CheckConfig
+		contains string
+	}{
+		{"missing name", CheckConfig{Type: "tcp", Address: address}, "name is required"},
+		{"missing address", CheckConfig{Name: "missing-address", Type: "tcp"}, "either 'address' or 'host'"},
+		{"conflicting address", CheckConfig{Name: "conflict", Type: "tcp", Address: address, Host: host}, "cannot specify both"},
+		{"http tls", CheckConfig{Name: "http", Type: "http", Address: address, TLSMode: "invalid"}, "for http checks"},
+		{"normalized http tls", CheckConfig{Name: "http-normalized", Type: " HTTP ", Address: address, TLSMode: "invalid"}, "for http checks"},
+		{"normalized postgres tls", CheckConfig{Name: "pg-normalized", Type: "Postgres", Address: address, TLSMode: "invalid"}, "postgres"},
+	}
+	validator := NewConfigValidator()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator.ValidateConfig(&Config{Checks: []CheckConfig{tt.check}})
+			if err == nil || !strings.Contains(err.Error(), tt.contains) {
+				t.Fatalf("expected error containing %q, got %v", tt.contains, err)
+			}
+		})
+	}
+}
