@@ -9,6 +9,7 @@ This document provides comprehensive documentation for all supported health chec
 - [Check Types](#check-types)
   - [HTTP Checks](#http-checks)
   - [TCP Checks](#tcp-checks)
+  - [DNS Checks](#dns-checks)
   - [MySQL Database Checks](#mysql-database-checks)
   - [PostgreSQL Database Checks](#postgresql-database-checks)
   - [Redis Cache Checks](#redis-cache-checks)
@@ -171,6 +172,35 @@ http GET address=https://api.example.com/health
 ```
 tcp connect to server.example.com:22
 ```
+
+---
+
+### DNS Checks
+
+**Purpose**: Verify that a hostname resolves to at least one address.
+
+**Method**: Resolve the name with Go's system-aware resolver, which honors
+`/etc/hosts` and `/etc/resolv.conf`. No connection is opened to the resolved
+addresses.
+
+**Configuration**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `host` or `address` | string | ✓ | Hostname to resolve (supports secrets). A `host:port` address is accepted and the port is ignored. URLs are rejected. |
+
+**Success Criteria**: The resolver returns at least one address.
+**Failure Criteria**: Resolution error, an invalid hostname, or the check deadline expiring.
+
+```yaml
+- name: public-dns
+  type: dns
+  host: example.com
+  timeout_ms: 3000
+  severity: warning
+```
+
+Details list the resolved addresses, for example
+`dns lookup host=example.com addresses=93.184.215.14,2606:2800:21f:cb07:6820:80da:af6b:8b2c`.
 
 ---
 

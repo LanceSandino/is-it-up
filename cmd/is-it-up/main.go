@@ -6,6 +6,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+
+	// Compile-time check plugins activated by this binary.
+	_ "github.com/LanceSandino/is-it-up/v2/pkg/checkplugins/dns"
 )
 
 func main() {

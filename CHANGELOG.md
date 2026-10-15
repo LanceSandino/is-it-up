@@ -3,6 +3,22 @@
 All notable user-facing changes are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-14
+
+### Added
+
+- `dns` check type that verifies a hostname resolves, configured with `host` or
+  `address` (a `host:port` address has its port ignored).
+- Check registry: check types register through `checks.RegisterCheckType`, and
+  validation and execution both read the registry. Plugin packages are activated
+  with a blank import at compile time; there is no runtime plugin loading.
+
+### Changed
+
+- Every check type, including registered plugins, now runs with panic
+  containment, the configured deadline, and secret redaction applied by the
+  runner rather than per type.
+
 ## [2.0.0] - 2026-10-14
 
 This is a major release because the secure defaults below can make existing
@@ -101,5 +117,6 @@ This is a major release because the secure defaults below can make existing
 - Release builds use Go 1.27.2, including the current standard-library security
   fixes, and compatible analysis tools are pinned to their latest stable releases.
 
+[2.1.0]: https://github.com/LanceSandino/is-it-up/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/LanceSandino/is-it-up/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/LanceSandino/is-it-up/releases/tag/v1.0.0

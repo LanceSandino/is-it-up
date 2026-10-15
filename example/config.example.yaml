@@ -59,6 +59,12 @@ checks:
     timeout_ms: 3000  # 3 second timeout for cache
     severity: critical
 
+  - name: public-dns
+    type: dns
+    host: example.com
+    timeout_ms: 3000
+    severity: warning
+
   - name: maxwell
     type: tcp
     address: localhost:3306

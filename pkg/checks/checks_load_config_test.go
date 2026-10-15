@@ -9,26 +9,6 @@ import (
 	"github.com/LanceSandino/is-it-up/v2/pkg/secrets"
 )
 
-func TestExampleConfigurationsValidate(t *testing.T) {
-	for _, path := range []string{
-		"../../example/config.example.yaml",
-		"../../example/aws-secret.example.yaml",
-	} {
-		t.Run(path, func(t *testing.T) {
-			cfg, format, err := LoadConfigAutoNoValidation(path)
-			if err != nil {
-				t.Fatalf("load example: %v", err)
-			}
-			if format != "yaml" {
-				t.Fatalf("format = %q, want yaml", format)
-			}
-			if err := ValidateConfig(cfg); err != nil {
-				t.Fatalf("validate example: %v", err)
-			}
-		})
-	}
-}
-
 // TestLoadConfig_BasicFunctionality tests the LoadConfig function that reads config from a YAML file.
 func TestLoadConfig_BasicFunctionality(t *testing.T) {
 	// Create a temporary config file

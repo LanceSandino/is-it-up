@@ -65,6 +65,7 @@ CI/CD pipeline, container, or the packaged systemd timer:
 **Supported Check Types**:
 - **HTTP**: GET requests with configurable paths and timeout
 - **TCP**: Socket connection testing
+- **DNS**: Hostname resolution, shipped as a compile-time plugin in `pkg/checkplugins/dns`
 - **MySQL**: Connection + SELECT 1 validation
 - **PostgreSQL**: Connection + SELECT 1 validation
 - **Redis**: PING with optional INFO parsing
@@ -224,19 +225,33 @@ pkg/logger/
 
 ### Adding New Check Types
 
-1. **Create check implementation**:
+Check types are registered in a registry that both `RunAll` and
+`ConfigValidator` read, so adding a type needs no edits to core dispatch or to
+the supported-type list.
+
+1. **Create a plugin package** whose runner returns `checks.CheckOutcome`:
    ```go
-   // pkg/checks/check_newtype.go
-   func checkNewType(ctx context.Context, address string, config CheckConfig) (bool, string) {
-       // Implementation
+   // pkg/checkplugins/newtype/newtype.go
+   func run(ctx context.Context, cfg checks.CheckConfig) checks.CheckOutcome {
+       return checks.CheckOutcome{OK: true, Message: "ok"}
+   }
+
+   func init() {
+       checks.RegisterCheckType("newtype", run)
    }
    ```
 
-2. **Add to RunAll orchestration**:
+   `RunAll` applies the check deadline to `ctx`, recovers panics, and redacts
+   secret-backed values from the message and details, so runners do not need to.
+   Registering an empty, nil, or already-registered type panics at startup.
+
+2. **Activate the plugin** in each binary that should offer it, with a blank import:
    ```go
-   case "newtype":
-       ok, msg := checkNewType(ctx, c.Address.String(), c)
+   import _ "github.com/LanceSandino/is-it-up/v2/pkg/checkplugins/newtype"
    ```
+
+   This is compile-time activation. There is no runtime plugin discovery or
+   dynamic loading, so release binaries stay static.
 
 3. **Add comprehensive tests**:
    ```go
@@ -276,7 +291,8 @@ type SecretFetcher interface {
 ```
 
 ### Custom Check Types
-Add new check implementations following the established patterns:
+Register new check types from plugin packages (see "Adding New Check Types")
+and follow the established patterns:
 - Context-based cancellation
 - Dependency injection for testing
 - Non-destructive operations

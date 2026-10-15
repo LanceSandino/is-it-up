@@ -83,11 +83,10 @@ func sanitizeResult(config CheckConfig, result Result) Result {
 	return result
 }
 
-func runCheckSafely(checkType, checkName string, check func() (bool, string)) (ok bool, message string) {
+func runOutcomeSafely(checkType, checkName string, check func() CheckOutcome) (outcome CheckOutcome) {
 	defer func() {
 		if recover() != nil {
-			ok = false
-			message = NewCheckError(checkType, checkName, "panic", errors.New("checker panic recovered")).Error()
+			outcome = CheckOutcome{OK: false, Message: NewCheckError(checkType, checkName, "panic", errors.New("checker panic recovered")).Error()}
 		}
 	}()
 	return check()
@@ -245,166 +244,35 @@ func LoadConfigAutoNoValidation(path string) (*Config, string, error) {
 func RunAll(ctx context.Context, cfg *Config) []Result {
 	results := make([]Result, 0, len(cfg.Checks))
 	for _, c := range cfg.Checks {
-		start := time.Now()
-		checkCtx, cancel := contextWithCheckTimeout(ctx, c)
-		var r Result
-		switch strings.ToLower(c.Type) {
-		case "http":
-			ok, msg := checkHTTP(checkCtx, c)
-			detail := fmt.Sprintf("http GET address=%s path=%s", redactAddress(c.Address.String()), c.Path.String())
-			// Only show TLS info for HTTPS URLs or when explicitly configured
-			if strings.HasPrefix(c.Address.String(), "https://") || c.TLSMode != "" {
-				tlsInfo := c.TLSMode
-				if tlsInfo == "" && strings.HasPrefix(c.Address.String(), "https://") {
-					tlsInfo = "required"
-				}
-				if tlsInfo != "" {
-					detail += fmt.Sprintf(" tls=%s", tlsInfo)
-				}
-			}
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "tcp":
-			ok, msg := checkTCPFn(checkCtx, c.Address.String())
-			detail := fmt.Sprintf("tcp connect to %s", redactAddress(c.Address.String()))
-			if !ok {
-				detail = detail + "; error: " + msg
-			}
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "mysql":
-			// Direct database connection and SELECT 1 query (includes connectivity test)
-			ok, msg := runCheckSafely("mysql", c.Name, func() (bool, string) { return checkMySQLFn(checkCtx, c) })
-			detail := func() string {
-				user := c.User.String()
-				if user == "" {
-					user = "(not-set)"
-				}
-				pwd := "(none)"
-				if c.Password.HasValue() {
-					pwd = "REDACTED"
-				}
-				action := fmt.Sprintf("mysql SELECT 1 on %s as user=%s password=%s", redactAddress(c.Address.String()), user, pwd)
-				if ok {
-					return action
-				}
-				return action + "; error: " + msg
-			}()
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "postgres":
-			// Direct database connection and SELECT 1 query (includes connectivity test)
-			ok, msg := runCheckSafely("postgres", c.Name, func() (bool, string) { return checkPostgresFn(checkCtx, c) })
-			detail := func() string {
-				user := c.User.String()
-				if user == "" {
-					user = "(not-set)"
-				}
-				pwd := "(none)"
-				if c.Password.HasValue() {
-					pwd = "REDACTED"
-				}
-				sslMode := c.TLSMode
-				if sslMode == "" {
-					sslMode = "verify-full"
-				}
-				action := fmt.Sprintf("postgres SELECT 1 on %s as user=%s password=%s sslmode=%s", redactAddress(c.Address.String()), user, pwd, sslMode)
-				if ok {
-					return action
-				}
-				return action + "; error: " + msg
-			}()
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "redis":
-			redisAddress := credentialTransportAddress(c, "rediss")
-			ok, msg := checkRedisFn(checkCtx, redisAddress, c.Password.String())
-			// build detail including masked password
-			pwd := "(none)"
-			if c.Password.HasValue() {
-				pwd = "REDACTED"
-			}
-			detail := fmt.Sprintf("redis PING to %s auth=%s", redactAddress(c.Address.String()), pwd)
-			// optionally run INFO parsing if requested
-			if ok && c.RedisInfo {
-				if iok, imsg := checkRedisInfoFn(checkCtx, redisAddress, c.Password.String()); !iok {
-					// prefer to mark as warning but keep original ok=false only if INFO fails critically
-					r = sanitizeResult(c, Result{Name: c.Name, OK: false, Message: "info: " + imsg, Severity: "warning", Timestamp: time.Now(), Duration: time.Since(start), Details: detail + "; info error: " + imsg})
-					results = append(results, r)
-					cancel()
-					continue
-				} else {
-					msg = msg + "; info: " + imsg
-					detail = detail + "; redis_info=true; info: " + imsg
-				}
-			}
-			// include whether redis_info was enabled in details
-			if !c.RedisInfo {
-				detail = detail + "; redis_info=false"
-			}
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "elasticsearch", "opensearch":
-			ok, msg := checkElasticsearchFn(checkCtx, c.Address.String(), c.Path.String())
-			// detail with URL and parsed status
-			rawPath := c.Path.String()
-			if rawPath == "" {
-				rawPath = "_cluster/health"
-			}
-			esURL := strings.TrimRight(redactAddress(c.Address.String()), "/") + "/" + rawPath
-			detail := fmt.Sprintf("elasticsearch/opensearch GET url=%s result=%s", esURL, msg)
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "rabbitmq":
-			// Default behavior: attempt AMQP connect+open-channel. If that fails,
-			// fall back to a basic TCP connect to ensure we can still report reachability.
-			rabbitAddress := credentialTransportAddress(c, "amqps")
-			ok, msg := checkRabbitAMQPFn(checkCtx, rabbitAddress, c.User.String(), c.Password.String(), c.Vhost.String())
-			detail := fmt.Sprintf("amqp connect to %s vhost=%s", redactAddress(c.Address.String()), c.Vhost.String())
-			if ok {
-				r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-				break
-			}
-			// Preserve legacy reachability fallback only for anonymous checks.
-			if !c.Password.HasValue() {
-				if tock, tmsg := checkTCPFn(checkCtx, c.Address.String()); tock {
-					tdetail := fmt.Sprintf("tcp connect to %s", redactAddress(c.Address.String()))
-					r = Result{Name: c.Name, OK: true, Message: tmsg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: tdetail}
-					break
-				}
-			}
-			// Both AMQP and TCP failed — report AMQP failure details (include TCP msg)
-			detail = detail + "; amqp_error: " + msg
-			r = Result{Name: c.Name, OK: false, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-
-		case "smtp":
-			ok, msg := checkSMTPFn(checkCtx, c)
-			// build detail including masked credentials and encryption info
-			user := c.User.String()
-			if user == "" {
-				user = "(none)"
-			}
-			pwd := "(none)"
-			if c.Password.HasValue() {
-				pwd = "REDACTED"
-			}
-			enc := c.SMTPEncryption.String()
-			if enc == "" {
-				enc = "starttls"
-			}
-			detail := fmt.Sprintf("smtp connect to %s user=%s password=%s encryption=%s", redactAddress(c.Address.String()), user, pwd, enc)
-			if !ok {
-				detail = detail + "; error: " + msg
-			}
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		case "mongo", "documentdb":
-			ok, msg := checkDocumentDBFn(checkCtx, c)
-			detail := fmt.Sprintf("documentdb ping %s", redactAddress(c.Address.String()))
-			if !ok {
-				detail = detail + "; error: " + msg
-			}
-			r = Result{Name: c.Name, OK: ok, Message: msg, Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start), Details: detail}
-		default:
-			r = Result{Name: c.Name, OK: false, Message: "unknown check type", Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start)}
-		}
-		results = append(results, sanitizeResult(c, r))
-		cancel()
+		results = append(results, runOne(ctx, c))
 	}
 	return results
+}
+
+// runOne dispatches one check through the registry with its deadline, panic
+// containment, and secret redaction applied uniformly to every check type.
+func runOne(ctx context.Context, c CheckConfig) Result {
+	start := time.Now()
+	run, found := lookupCheckType(c.Type)
+	if !found {
+		return Result{Name: c.Name, OK: false, Message: "unknown check type", Severity: c.Severity, Timestamp: time.Now(), Duration: time.Since(start)}
+	}
+	checkCtx, cancel := contextWithCheckTimeout(ctx, c)
+	defer cancel()
+	outcome := runOutcomeSafely(normalizeCheckType(c.Type), c.Name, func() CheckOutcome { return run(checkCtx, c) })
+	severity := c.Severity
+	if outcome.Severity != "" {
+		severity = outcome.Severity
+	}
+	return sanitizeResult(c, Result{
+		Name:      c.Name,
+		OK:        outcome.OK,
+		Message:   outcome.Message,
+		Severity:  severity,
+		Timestamp: time.Now(),
+		Duration:  time.Since(start),
+		Details:   outcome.Details,
+	})
 }
 
 // Redis and INFO checks are implemented in check_redis.go
