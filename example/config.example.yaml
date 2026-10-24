@@ -73,9 +73,9 @@ checks:
     timeout_ms: 2000  # 2 second timeout for TCP connection
     severity: info
 
-  - name: mailhog-smtp
+  - name: mailpit-smtp
     type: smtp
-    # MailHog SMTP server for development email testing
+    # Mailpit SMTP server for development email testing
     address: localhost:1025
     smtp_encryption: none  # No encryption for local development
     timeout_ms: 5000  # 5 second timeout for SMTP

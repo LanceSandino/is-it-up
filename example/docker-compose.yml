@@ -2,34 +2,33 @@
 name: is-it-up
 services:
   http-app:
-    image: danthegoodman/https-echoserver
+    image: mendhak/http-https-echo:43
     ports:
-      - "8080:80"
-      - "8443:443"
-  # Previously used hashicorp/http-echo:0.2.3, but switched to danthegoodman/https-echoserver
-  # to support both HTTP and HTTPS testing for the is-it-up health checks.
-  # The https-echoserver provides both HTTP (port 80) and HTTPS (port 443) endpoints
-  # allowing comprehensive testing of TLS validation modes (required, skip-verify).
-  # It uses self-signed certificates for HTTPS and returns JSON responses with request details.
+      - "8080:8080"
+      - "8443:8443"
+  # mendhak/http-https-echo serves both HTTP (port 8080) and HTTPS (port 8443)
+  # so the is-it-up HTTP checks can exercise TLS validation modes (required,
+  # skip-verify). It uses a self-signed certificate for HTTPS and returns JSON
+  # describing each request.
 
   http-health:
-    # Sidecar service to provide healthcheck for http-app since the https-echoserver
+    # Sidecar service to provide healthcheck for http-app since the echo server
     # image doesn't include curl or shell utilities needed for Docker healthchecks.
     # This ensures http-app is actually responding before other services start.
-    image: curlimages/curl:8.1.2
+    image: curlimages/curl:8.23.0
     # keep the container running; healthcheck will probe the http-app service
     command: ["sh", "-c", "sleep infinity"]
     depends_on:
       - http-app
     healthcheck:
       # probe http-app by service name
-      test: ["CMD", "curl", "-f", "http://http-app:80/hello"]
+      test: ["CMD", "curl", "-f", "http://http-app:8080/hello"]
       interval: 5s
       timeout: 3s
       retries: 5
 
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -44,7 +43,7 @@ services:
       retries: 5
 
   postgres:
-    image: postgres:15
+    image: postgres:18
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -58,7 +57,7 @@ services:
       retries: 5
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:4-management
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
@@ -72,14 +71,15 @@ services:
       retries: 5
 
   opensearch:
-    image: opensearchproject/opensearch:2.8.0
+    image: opensearchproject/opensearch:3.9.0
     environment:
       - cluster.name=opensearch-cluster
       - node.name=opensearch-node1
       - discovery.type=single-node
       - bootstrap.memory_lock=true
       - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS}
-      - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
     ulimits:
       memlock:
         soft: -1
@@ -92,9 +92,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 90s # OpenSearch 3 takes about a minute to open its HTTP port
 
   redis:
-    image: redis:6.2
+    image: redis:8
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     ports:
       - "6379:6379" # Redis port
@@ -104,19 +105,19 @@ services:
       timeout: 5s
       retries: 5
 
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
+  mailpit:
+    image: axllent/mailpit:v1.32.0
     ports:
       - "1025:1025"  # SMTP port
       - "8025:8025"  # Web UI port
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8025"]
+      test: ["CMD", "/mailpit", "readyz"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   mongo:
-    image: mongo:6.0
+    image: mongo:8.0
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
