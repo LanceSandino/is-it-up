@@ -19,7 +19,7 @@ Which services are provided
 - `rabbitmq` - RabbitMQ broker with the standard AMQP port (5672)
 - `opensearch` - OpenSearch single-node (cluster health endpoint on 9200)
 - `redis` - Redis with optional AUTH (used by PING/INFO checks), exposed on port 6379
-- `mailhog` - MailHog SMTP server for email testing (SMTP on 1025, Web UI on 8025)
+- `mailpit` - Mailpit SMTP server for email testing (SMTP on 1025, Web UI on 8025)
 - `mongo` - MongoDB (DocumentDB-compatible) server for the DocumentDB/Mongo checks, exposed on port 27017
 
 Notes:

@@ -612,7 +612,7 @@ smtp check 'ses-smtp' auth failed: 535 Authentication failed
 | AWS SES | email-smtp.{region}.amazonaws.com | 587 | starttls | Requires IAM SMTP credentials |
 | Office 365 | smtp.office365.com | 587 | starttls | Requires app password |
 | Gmail | smtp.gmail.com | 587/465 | starttls/ssl | Requires app password |
-| MailHog | localhost | 1025 | none | Development only |
+| Mailpit | localhost | 1025 | none | Development only |
 
 ---
 

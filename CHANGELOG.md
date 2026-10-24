@@ -3,6 +3,30 @@
 All notable user-facing changes are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-10-24
+
+Security release. Upgrading is recommended for every 2.x installation.
+
+### Security
+
+- Release binaries and container images are built with Go 1.27.3, which fixes
+  GO-2026-6809 (CVE-2026-111943): `crypto/x509` now refuses known compromised
+  intermediate certificates. govulncheck found the affected certificate
+  verification path reachable in 2.1.0 through the TLS-enabled checks.
+- The container build stage uses `golang:1.27.3-alpine`, pinned by digest.
+- Go module dependencies are updated to their latest releases, including the
+  AWS SDK for Go v2, `rabbitmq/amqp091-go` 1.16.0, and `klauspost/compress`
+  1.20.3. govulncheck reports no reachable vulnerabilities.
+
+### Changed
+
+- `example/docker-compose.yml` uses currently supported service images:
+  MySQL 8.4, PostgreSQL 18, Redis 8, RabbitMQ 4, OpenSearch 3.9.0,
+  MongoDB 8.0, and curl 8.23.0. Mailpit replaces the unmaintained MailHog,
+  and `mendhak/http-https-echo` replaces the unmaintained HTTPS echo server.
+- Static analysis uses gosec 2.30.0. A weekly workflow re-runs govulncheck,
+  and Dependabot now also tracks the Docker base image.
+
 ## [2.1.0] - 2026-10-14
 
 ### Added
@@ -117,6 +141,7 @@ This is a major release because the secure defaults below can make existing
 - Release builds use Go 1.27.2, including the current standard-library security
   fixes, and compatible analysis tools are pinned to their latest stable releases.
 
+[2.1.1]: https://github.com/LanceSandino/is-it-up/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/LanceSandino/is-it-up/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/LanceSandino/is-it-up/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/LanceSandino/is-it-up/releases/tag/v1.0.0

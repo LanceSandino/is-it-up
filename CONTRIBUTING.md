@@ -2,7 +2,7 @@
 
 Issues and focused pull requests are welcome. Before opening a pull request:
 
-1. Use Go 1.27.2 or newer and create a branch from `main`.
+1. Use Go 1.27.3 or newer and create a branch from `main`.
 2. Add or update tests for behavior changes.
 3. Run `/bin/bash scripts/test.sh`.
 4. Run `/bin/bash scripts/validate-examples.sh`,
