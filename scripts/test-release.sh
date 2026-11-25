@@ -10,9 +10,13 @@ VERSION=9.8.7 /bin/bash scripts/package-release.sh 9.8.7
 for arch in amd64 arm64; do
   archive="dist/release/is-it-up_linux_${arch}.tar.gz"
   test -f "$archive"
-  tar -tzf "$archive" | grep -Eq '(^|/)is-it-up$'
-  tar -tzf "$archive" | grep -Eq '(^|/)packaging/systemd/is-it-up.service$'
-  tar -xOzf "$archive" ./packaging/systemd/is-it-up.service | grep -Fq 'MemoryMax=128M'
+  # Read tar output fully before matching: piping into `grep -q` lets grep
+  # exit early, and tar then fails with a broken pipe under pipefail.
+  listing=$(tar -tzf "$archive")
+  grep -Eq '(^|/)is-it-up$' <<<"$listing"
+  grep -Eq '(^|/)packaging/systemd/is-it-up.service$' <<<"$listing"
+  unit=$(tar -xOzf "$archive" ./packaging/systemd/is-it-up.service)
+  grep -Fq 'MemoryMax=128M' <<<"$unit"
 done
 
 grep -Fq 'Verify tag targets the current main commit' .github/workflows/release.yml

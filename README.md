@@ -225,7 +225,7 @@ docker run --rm is-it-up:local --version
 
 ## Build and test
 
-Development requires Go 1.27.3 or newer.
+Development requires Go 1.27.4 or newer.
 
 ```bash
 make test             # format, vet, race detector, tests, and >=85% coverage
