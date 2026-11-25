@@ -3,6 +3,17 @@
 All notable user-facing changes are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Builds use Go 1.27.4, which fixes GO-2026-6859 in `net/http`. govulncheck
+  found the affected code reachable in builds made with Go 1.27.3, including
+  the Elasticsearch, DocumentDB, RabbitMQ and AWS Secrets Manager paths.
+- The container build stage uses `golang:1.27.4-alpine`, pinned by digest.
+- `golang.org/x/crypto` is updated to 0.59.0, which fixes GO-2026-5932.
+  govulncheck did not find the affected code reachable.
+
 ## [2.1.1] - 2026-10-24
 
 Security release. Upgrading is recommended for every 2.x installation.
