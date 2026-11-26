@@ -3,7 +3,9 @@
 All notable user-facing changes are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.1.2] - 2026-11-25
+
+Security release. Upgrading is recommended for every 2.x installation.
 
 ### Security
 
@@ -13,6 +15,10 @@ All notable user-facing changes are documented here. This project follows
 - The container build stage uses `golang:1.27.4-alpine`, pinned by digest.
 - `golang.org/x/crypto` is updated to 0.59.0, which fixes GO-2026-5932.
   govulncheck did not find the affected code reachable.
+- Go module dependencies are updated to their latest releases, including the
+  AWS SDK for Go v2, `go-sql-driver/mysql` 1.10.2, `rabbitmq/amqp091-go`
+  1.17.0, and the MongoDB Go driver 2.10.1. govulncheck reports no
+  vulnerabilities.
 
 ## [2.1.1] - 2026-10-24
 
@@ -152,6 +158,7 @@ This is a major release because the secure defaults below can make existing
 - Release builds use Go 1.27.2, including the current standard-library security
   fixes, and compatible analysis tools are pinned to their latest stable releases.
 
+[2.1.2]: https://github.com/LanceSandino/is-it-up/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/LanceSandino/is-it-up/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/LanceSandino/is-it-up/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/LanceSandino/is-it-up/compare/v1.0.0...v2.0.0
